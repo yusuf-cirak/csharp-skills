@@ -1,0 +1,14 @@
+{
+  "name": "yusuf-csharp-standards",
+  "owner": {
+    "name": "Yusuf Cirak",
+    "email": "rewal34@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "csharp-standards",
+      "source": "./plugins/csharp-standards",
+      "description": "Personal C#/.NET/ASP.NET Core coding standards as a 7-skill family (language, DDD, web-api, input-validation, production-hardening, testing) behind a router."
+    }
+  ]
+}
