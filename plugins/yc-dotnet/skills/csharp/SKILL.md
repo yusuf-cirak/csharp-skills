@@ -1,11 +1,11 @@
 ---
-name: csharp-language
-description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, and `Span<T>`/`IEnumerable<T>` performance rules. MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `dotnet-ddd`, for endpoints `aspnetcore-web-api`, for request/DTO limits `aspnetcore-input-validation`, for service hardening `aspnetcore-production-hardening`.
+name: csharp
+description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, and `Span<T>`/`IEnumerable<T>` performance rules. MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
 ---
 
 # C# Language & Style
 
-The user's permanent C# language idioms. Apply by default to any `.cs` edit. If a framework or language version makes a rule impossible, write the closest equivalent and note why. This is the base layer every other C# skill (`dotnet-ddd`, `aspnetcore-web-api`, `aspnetcore-input-validation`, `aspnetcore-production-hardening`) builds on.
+The user's permanent C# language idioms. Apply by default to any `.cs` edit. If a framework or language version makes a rule impossible, write the closest equivalent and note why. This is the base layer every other C# skill (`ddd`, `web-api`, `validation`, `hardening`) builds on.
 
 ## Namespaces & File Organization
 
@@ -44,15 +44,15 @@ The user's permanent C# language idioms. Apply by default to any `.cs` edit. If 
 
 Base type, `Text` example, JSON converter, and EF Core converter live in the shared reference (single source of truth):
 
-→ `../csharp-coding-standards/references/value-object-base.md`
+→ `../index/references/value-object-base.md`
 
-For length-typed `Text` VOs used on request DTOs (`ShortText`/`MediumText`/…), see `aspnetcore-input-validation`.
+For length-typed `Text` VOs used on request DTOs (`ShortText`/`MediumText`/…), see `validation`.
 
 ## Functional + OO
 
 Monadic error handling (`Result<T>`/`Option<T>`) over exceptions, monadic optionals over nullable references. Library selection (YC.Monad first, else the codebase's existing monad) and usage rules live in the shared reference:
 
-→ `../csharp-coding-standards/references/monads.md`
+→ `../index/references/monads.md`
 
 ## LINQ over imperative loops
 
@@ -131,8 +131,8 @@ foreach (var customer in customers)
 
 ## Related skills
 
-- `dotnet-ddd` — where domain logic/aggregates/modules live.
-- `aspnetcore-web-api` — endpoint/handler/slice shape.
-- `aspnetcore-input-validation` — length-typed VOs, request limits.
-- `aspnetcore-production-hardening` — security/ops for exposed services.
-- `csharp-testing` — how the tests for this code are written (xUnit/Shouldly/NSubstitute/Testcontainers).
+- `ddd` — where domain logic/aggregates/modules live.
+- `web-api` — endpoint/handler/slice shape.
+- `validation` — length-typed VOs, request limits.
+- `hardening` — security/ops for exposed services.
+- `testing` — how the tests for this code are written (xUnit/Shouldly/NSubstitute/Testcontainers).
