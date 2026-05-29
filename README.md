@@ -1,4 +1,4 @@
-# claude-csharp-standards
+# csharp-standards
 
 Personal C# / .NET / ASP.NET Core coding standards, packaged as a Claude Code plugin so they install on any machine without re-copying skill files into `~/.claude/skills`.
 
@@ -21,11 +21,11 @@ Shared `references/` (single source of truth): `value-object-base.md`, `input-li
 ## Install
 
 ```
-/plugin marketplace add rewal34/claude-csharp-standards
-/plugin install csharp-standards@yusuf-csharp-standards
+/plugin marketplace add yc/csharp-standards
+/plugin install csharp-standards@yc
 ```
 
-(Replace `rewal34/claude-csharp-standards` with the actual GitHub `owner/repo` once pushed. Local testing: `/plugin marketplace add C:/Users/yusuf.cirak/repos/claude-csharp-standards`.)
+(Local testing before push: `/plugin marketplace add C:/Users/yusuf.cirak/repos/claude-csharp-standards`.)
 
 ## After installing — remove the loose copies
 
