@@ -1,11 +1,11 @@
 ---
-name: aspnetcore-production-hardening
-description: User's personal FAANG-level production hardening rules for .NET/ASP.NET Core services exposed to untrusted or multi-tenant traffic. Covers tiered/distributed rate limiting & burst protection, idempotency keys & webhook HMAC, authn/authz (short-lived tokens, refresh rotation + reuse detection, global fallback authorize, resource-level checks, tenant-from-claim), security headers & CORS, cryptography (Argon2id/bcrypt, FixedTimeEquals, managed secrets), ProblemDetails error handling, structured logging & audit, EF Core hardening, secure file upload, SSRF defense, XML/deserialization safety, HTTP caching, multi-tenancy isolation, background jobs/outbox, dependency & supply-chain security, OpenTelemetry observability, API versioning/lifecycle, cancellation/timeouts, and CI/test security. Use when hardening a service, doing a security review, configuring middleware/Program.cs, or deploying. Use ALONGSIDE `csharp-language`, `aspnetcore-web-api`, `aspnetcore-input-validation`. DTO-level input size/length limits belong to `aspnetcore-input-validation`.
+name: hardening
+description: User's personal FAANG-level production hardening rules for .NET/ASP.NET Core services exposed to untrusted or multi-tenant traffic. Covers tiered/distributed rate limiting & burst protection, idempotency keys & webhook HMAC, authn/authz (short-lived tokens, refresh rotation + reuse detection, global fallback authorize, resource-level checks, tenant-from-claim), security headers & CORS, cryptography (Argon2id/bcrypt, FixedTimeEquals, managed secrets), ProblemDetails error handling, structured logging & audit, EF Core hardening, secure file upload, SSRF defense, XML/deserialization safety, HTTP caching, multi-tenancy isolation, background jobs/outbox, dependency & supply-chain security, OpenTelemetry observability, API versioning/lifecycle, cancellation/timeouts, and CI/test security. Use when hardening a service, doing a security review, configuring middleware/Program.cs, or deploying. Use ALONGSIDE `csharp`, `web-api`, `validation`. DTO-level input size/length limits belong to `validation`.
 ---
 
 # Production Hardening (FAANG-level)
 
-These rules apply to any service exposed to untrusted networks or multi-tenant traffic. They are non-negotiable defaults; deviations need a written justification on the PR. DTO/serialization input limits are owned by `aspnetcore-input-validation`; this skill covers the network/runtime/ops hardening surface.
+These rules apply to any service exposed to untrusted networks or multi-tenant traffic. They are non-negotiable defaults; deviations need a written justification on the PR. DTO/serialization input limits are owned by `validation`; this skill covers the network/runtime/ops hardening surface.
 
 ## Tiered Rate Limiting & Burst Protection
 
@@ -214,7 +214,7 @@ CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowC
 - Store outside the webroot; generate server-side filename; never echo client filename in URLs.
 - Re-encode images server-side to strip EXIF and defuse decompression bombs (e.g. ImageSharp with pixel-count cap).
 - Allowlist of `Content-Type`; reject everything else.
-- Per-upload size limit via `[RequestSizeLimit]` (see `aspnetcore-input-validation` section 6).
+- Per-upload size limit via `[RequestSizeLimit]` (see `validation` section 6).
 
 ## SSRF Defense
 
@@ -289,8 +289,8 @@ CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowC
 
 ## Related skills
 
-- `aspnetcore-input-validation` — DTO/serialization input limits, `InputLimits`, length-typed VOs.
-- `aspnetcore-web-api` — endpoint/handler shape these policies attach to.
-- `dotnet-ddd` — outbox/domain-event and module boundaries.
-- `csharp-language` — base idioms (records, monads, performance).
-- `csharp-testing` — how tests are written; the CI/Test Security gates here (coverage, Stryker, header/`429` snapshots) are exercised by that standard.
+- `validation` — DTO/serialization input limits, `InputLimits`, length-typed VOs.
+- `web-api` — endpoint/handler shape these policies attach to.
+- `ddd` — outbox/domain-event and module boundaries.
+- `csharp` — base idioms (records, monads, performance).
+- `testing` — how tests are written; the CI/Test Security gates here (coverage, Stryker, header/`429` snapshots) are exercised by that standard.

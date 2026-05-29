@@ -6,9 +6,9 @@
   },
   "plugins": [
     {
-      "name": "csharp-standards",
-      "source": "./plugins/csharp-standards",
-      "description": "Personal C#/.NET/ASP.NET Core coding standards as a 7-skill family (language, DDD, web-api, input-validation, production-hardening, testing) behind a router."
+      "name": "yc-dotnet",
+      "source": "./plugins/yc-dotnet",
+      "description": "Personal C# / .NET / ASP.NET Core coding standards as a 7-skill family (csharp, ddd, web-api, validation, hardening, testing) behind a router (index)."
     }
   ]
 }

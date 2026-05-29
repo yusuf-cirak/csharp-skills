@@ -1,22 +1,22 @@
 ---
-name: aspnetcore-input-validation
-description: User's personal rules for hardening untrusted input at the DTO / serialization boundary in ASP.NET Core. Covers the central `InputLimits` constants, length-typed `Text` value objects (`ShortText`/`MediumText`/`LongText`/`XLongText`, `Email`/`Slug`/`Url`/`PhoneNumber`) instead of raw `string`, mandatory FluentValidation rules (MaximumLength, collection caps, `.IsInEnum()`, URL scheme allowlist, control-char rejection, ReDoS-safe regex), global `JsonSerializerOptions` hardening, Kestrel/`FormOptions` limits, per-endpoint size override, mandatory pagination, output encoding, and the forbidden anti-patterns. Use when defining or reviewing request DTOs/commands/queries, request validators, JSON/serialization config, or any code that accepts client input. Use ALONGSIDE `csharp-language` and `aspnetcore-web-api`. Rate limiting, authn, and other network hardening live in `aspnetcore-production-hardening`.
+name: validation
+description: User's personal rules for hardening untrusted input at the DTO / serialization boundary in ASP.NET Core. Covers the central `InputLimits` constants, length-typed `Text` value objects (`ShortText`/`MediumText`/`LongText`/`XLongText`, `Email`/`Slug`/`Url`/`PhoneNumber`) instead of raw `string`, mandatory FluentValidation rules (MaximumLength, collection caps, `.IsInEnum()`, URL scheme allowlist, control-char rejection, ReDoS-safe regex), global `JsonSerializerOptions` hardening, Kestrel/`FormOptions` limits, per-endpoint size override, mandatory pagination, output encoding, and the forbidden anti-patterns. Use when defining or reviewing request DTOs/commands/queries, request validators, JSON/serialization config, or any code that accepts client input. Use ALONGSIDE `csharp` and `web-api`. Rate limiting, authn, and other network hardening live in `hardening`.
 ---
 
 # ASP.NET Core Input Security & Serialization Limits
 
-Every endpoint, DTO, validator, value object, and JSON configuration MUST enforce hard limits on input size, depth, and shape. Never trust client input. Apply these rules by default — only relax them with an explicit, justified opt-in. Pairs with `aspnetcore-web-api` (endpoint shape) and `csharp-language` (VO/record idioms).
+Every endpoint, DTO, validator, value object, and JSON configuration MUST enforce hard limits on input size, depth, and shape. Never trust client input. Apply these rules by default — only relax them with an explicit, justified opt-in. Pairs with `web-api` (endpoint shape) and `csharp` (VO/record idioms).
 
 ## 1. Central `InputLimits` constants
 
 All length / size / count limits live in one shared static class (place in `BuildingBlocks.Domain` or the project's equivalent shared layer). Validators, value objects, endpoints, and Kestrel config reference these — never inline magic numbers.
 
 Canonical definition (single source of truth):
-→ `../csharp-coding-standards/references/input-limits.md`
+→ `../index/references/input-limits.md`
 
 ## 2. Length-typed `Text` value objects
 
-Free-form `string` properties on DTOs/domain are forbidden. Use a value object whose type carries the length constraint, so the limit cannot be forgotten. Factories return `Result<T>` (YC.Monad if available; otherwise the codebase's existing monad — see `../csharp-coding-standards/references/monads.md`). The `ValueObject<T>` base is in `../csharp-coding-standards/references/value-object-base.md`.
+Free-form `string` properties on DTOs/domain are forbidden. Use a value object whose type carries the length constraint, so the limit cannot be forgotten. Factories return `Result<T>` (YC.Monad if available; otherwise the codebase's existing monad — see `../index/references/monads.md`). The `ValueObject<T>` base is in `../index/references/value-object-base.md`.
 
 ```csharp
 public sealed record ShortText : ValueObject<string>
@@ -149,7 +149,7 @@ Concrete request validators inherit / include the paged validator.
 
 ## 8. Rate limiting
 
-Every endpoint is rate-limited. Burst guard + steady quota + concurrency cap + failed-auth lockout, all partitioned by authenticated principal. Full policy and code live in `aspnetcore-production-hardening` → **Tiered Rate Limiting & Burst Protection**.
+Every endpoint is rate-limited. Burst guard + steady quota + concurrency cap + failed-auth lockout, all partitioned by authenticated principal. Full policy and code live in `hardening` → **Tiered Rate Limiting & Burst Protection**.
 
 ## 9. Anti-patterns (forbidden)
 
@@ -168,7 +168,7 @@ When emitting user-controlled data into HTML/JS/CSS contexts, use `HtmlEncoder.D
 
 ## Related skills
 
-- `csharp-language` — value object / record / monad idioms.
-- `aspnetcore-web-api` — endpoint/handler/validator shape.
-- `aspnetcore-production-hardening` — rate limiting, authn/authz, headers, file upload, SSRF, deserialization safety.
-- `csharp-testing` — unit tests asserting `InputLimits`/VO factory rules; integration tests for the 400/validation envelope.
+- `csharp` — value object / record / monad idioms.
+- `web-api` — endpoint/handler/validator shape.
+- `hardening` — rate limiting, authn/authz, headers, file upload, SSRF, deserialization safety.
+- `testing` — unit tests asserting `InputLimits`/VO factory rules; integration tests for the 400/validation envelope.

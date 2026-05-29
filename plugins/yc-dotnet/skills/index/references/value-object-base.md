@@ -1,6 +1,6 @@
 # Value Object base type + converters
 
-Shared base for all value objects. Used by `csharp-language` (VO pattern), `dotnet-ddd` (domain VOs), and `aspnetcore-input-validation` (length-typed `Text` VOs).
+Shared base for all value objects. Used by `csharp` (VO pattern), `ddd` (domain VOs), and `validation` (length-typed `Text` VOs).
 
 ## Base type
 

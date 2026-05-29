@@ -1,6 +1,6 @@
 # Monadic error handling — library selection & usage
 
-Shared rule referenced by `csharp-language` (functional idioms), `dotnet-ddd` (factory validation returns), and `aspnetcore-input-validation` (VO factories).
+Shared rule referenced by `csharp` (functional idioms), `ddd` (factory validation returns), and `validation` (VO factories).
 
 - Prefer monadic error handling over exceptions, and monadic optionals over nullable references.
 - **Library selection (check before writing):**

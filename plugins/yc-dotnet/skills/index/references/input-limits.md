@@ -2,7 +2,7 @@
 
 Single shared static class for all length / size / count limits. Place in `BuildingBlocks.Domain` or the project's equivalent shared layer. Validators, value objects, endpoints, and Kestrel config reference these — never inline magic numbers.
 
-Used by `aspnetcore-input-validation` (the canonical owner) and referenced from `aspnetcore-production-hardening` (upload size, etc.).
+Used by `validation` (the canonical owner) and referenced from `hardening` (upload size, etc.).
 
 ```csharp
 public static class InputLimits

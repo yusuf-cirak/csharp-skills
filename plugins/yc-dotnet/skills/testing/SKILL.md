@@ -1,11 +1,11 @@
 ---
-name: csharp-testing
-description: User's personal C#/.NET testing standard. Fixed stack — xUnit (test framework), Shouldly (assertions), NSubstitute (mocking, ports only), Testcontainers (real Postgres/Redis in integration tests with Respawn cleanup), Bogus (seeded test-data builders / Object Mother), and NetArchTest (architecture/layer-boundary tests). Covers test project layout & naming, `Method_State_Expectation` naming, AAA structure, asserting on `Result<T>`/`Option<T>` monads, unit-vs-integration split, `ICollectionFixture` Testcontainers base class, and DDD layer-boundary enforcement. MUST be used whenever writing, editing, reviewing, or generating ANY C# test (`*.Tests`/`*.IntegrationTests` projects, `[Fact]`/`[Theory]`, fixtures, test doubles) or setting up a test project. Use ALONGSIDE `csharp-language`; references domain/endpoint rules from `dotnet-ddd`, `aspnetcore-web-api`, `aspnetcore-production-hardening`.
+name: testing
+description: User's personal C#/.NET testing standard. Fixed stack — xUnit (test framework), Shouldly (assertions), NSubstitute (mocking, ports only), Testcontainers (real Postgres/Redis in integration tests with Respawn cleanup), Bogus (seeded test-data builders / Object Mother), and NetArchTest (architecture/layer-boundary tests). Covers test project layout & naming, `Method_State_Expectation` naming, AAA structure, asserting on `Result<T>`/`Option<T>` monads, unit-vs-integration split, `ICollectionFixture` Testcontainers base class, and DDD layer-boundary enforcement. MUST be used whenever writing, editing, reviewing, or generating ANY C# test (`*.Tests`/`*.IntegrationTests` projects, `[Fact]`/`[Theory]`, fixtures, test doubles) or setting up a test project. Use ALONGSIDE `csharp`; references domain/endpoint rules from `ddd`, `web-api`, `hardening`.
 ---
 
 # C# Testing Standard
 
-The user's permanent testing rules. Fixed stack — do not substitute libraries without explicit opt-in. Apply alongside `csharp-language` (records/monads/idioms). Production-grade CI/SAST/DAST/mutation gates live in `aspnetcore-production-hardening` → CI/Test Security; this skill governs how tests themselves are written.
+The user's permanent testing rules. Fixed stack — do not substitute libraries without explicit opt-in. Apply alongside `csharp` (records/monads/idioms). Production-grade CI/SAST/DAST/mutation gates live in `hardening` → CI/Test Security; this skill governs how tests themselves are written.
 
 ## Stack (fixed)
 
@@ -55,7 +55,7 @@ public sealed class ShortTextFactoryTests
 
 ## Asserting on monads
 
-Domain factories/handlers return `Result<T>`/`Option<T>` (see `../csharp-coding-standards/references/monads.md`). Assert on the monad, never via try/catch:
+Domain factories/handlers return `Result<T>`/`Option<T>` (see `../index/references/monads.md`). Assert on the monad, never via try/catch:
 
 - Success: `result.IsSuccess.ShouldBeTrue();` then `result.Value.ShouldBe(...)`.
 - Failure: `result.IsFailure.ShouldBeTrue();` then assert the error.
@@ -145,12 +145,12 @@ public abstract class IntegrationTestBase(PostgresFixture fixture) : IAsyncLifet
 ```
 
 - API-level integration uses `WebApplicationFactory<TEntryPoint>` with the container's connection string injected via config override.
-- Assert real HTTP behavior the hardening rules promise: `ProblemDetails` shape, security headers, `429` envelope (see `aspnetcore-production-hardening`).
+- Assert real HTTP behavior the hardening rules promise: `ProblemDetails` shape, security headers, `429` envelope (see `hardening`).
 - Every test that touches I/O passes a `CancellationToken`.
 
 ## Architecture tests (DDD boundaries)
 
-One `Architecture.Tests` project enforcing the layering from `dotnet-ddd`. Fail the build on violation.
+One `Architecture.Tests` project enforcing the layering from `ddd`. Fail the build on violation.
 
 ```csharp
 [Fact]
@@ -172,7 +172,7 @@ Minimum rules: Domain depends on nothing outward; Application never references I
 
 - coverlet collects line + branch coverage; CI gate (default ≥ 80% on changed projects, tune per repo).
 - Tests run in CI on every PR; integration tests need Docker available on the runner.
-- Mutation testing (`Stryker.NET`) on critical domain paths — owned by `aspnetcore-production-hardening` → CI/Test Security.
+- Mutation testing (`Stryker.NET`) on critical domain paths — owned by `hardening` → CI/Test Security.
 
 ## Anti-patterns (forbidden)
 
@@ -186,8 +186,8 @@ Minimum rules: Domain depends on nothing outward; Application never references I
 
 ## Related skills
 
-- `csharp-language` — records/monads/idioms the SUT and builders follow.
-- `dotnet-ddd` — the layer boundaries the architecture tests enforce.
-- `aspnetcore-web-api` — endpoints exercised by integration tests.
-- `aspnetcore-input-validation` — `InputLimits`/VO rules asserted in unit tests.
-- `aspnetcore-production-hardening` — CI gates, mutation testing, security-header/`429` assertions.
+- `csharp` — records/monads/idioms the SUT and builders follow.
+- `ddd` — the layer boundaries the architecture tests enforce.
+- `web-api` — endpoints exercised by integration tests.
+- `validation` — `InputLimits`/VO rules asserted in unit tests.
+- `hardening` — CI gates, mutation testing, security-header/`429` assertions.
