@@ -1,4 +1,4 @@
-# csharp-standards
+# csharp-skills
 
 Personal C# / .NET / ASP.NET Core coding standards, packaged as a Claude Code plugin so they install on any machine without re-copying skill files into `~/.claude/skills`.
 
@@ -21,7 +21,7 @@ Shared `references/` (single source of truth): `value-object-base.md`, `input-li
 ## Install
 
 ```
-/plugin marketplace add yc/csharp-standards
+/plugin marketplace add yusuf-cirak/csharp-skills
 /plugin install csharp-standards@yc
 ```
 
