@@ -157,6 +157,23 @@ Inbound webhooks: require HMAC signature + `X-Timestamp` (reject if `|now - ts| 
 - **Tenant id MUST come from a token claim**, never from route/query/body. Expose via `ICurrentTenant` populated from `HttpContext.User`.
 - `mTLS` for service-to-service traffic inside the cluster.
 
+JWT bearer validation — hardened defaults (config-driven: symmetric secret for dev/test, OIDC `Authority`+JWKS for prod):
+
+```csharp
+o.MapInboundClaims = false; // keep "sub" as "sub" — rate-limiter, audit and log enrichment read it raw
+o.TokenValidationParameters = new()
+{
+    ValidateIssuer = true, ValidateAudience = true, ValidateLifetime = true,
+    ValidateIssuerSigningKey = true, RequireSignedTokens = true, RequireExpirationTime = true,
+    ClockSkew = TimeSpan.FromSeconds(30), // the 5-minute default keeps expired tokens alive far too long
+    NameClaimType = "sub", RoleClaimType = "role",
+};
+```
+
+- **Secure by default**: register the authenticated fallback policy (above). It also applies to **unmatched routes**, so an anonymous request to an unknown path returns **401, not 404** (route existence is not leaked). Mark health/docs endpoints `AllowAnonymous`.
+- **Scope authorization**: read OAuth scopes from both conventions — a space-delimited `scope` claim **and** repeated `scp` claims. Expose a `.RequireScope("orders:write")` endpoint helper (a policy + `IAuthorizationHandler`) following the same convention as `.RequireIdempotency()`. Roles use the native `.RequireAuthorization(p => p.RequireRole(...))`.
+- **401/403 as problem+json**: wire `JwtBearerEvents.OnChallenge` (401) and `OnForbidden` (403) to write RFC 9457 `ProblemDetails` via `IProblemDetailsService` (consistent with the global handler — same `traceId`/`correlation_id` stamping), set `WWW-Authenticate` on challenge, and **never leak token-validation specifics** to the caller (`OnAuthenticationFailed` stays silent in prod; detail lives in the trace/logs).
+
 ## Security Headers + CORS
 
 ```csharp
@@ -178,6 +195,26 @@ app.Use(async (ctx, next) =>
 
 CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowCredentials()` is **forbidden** (browsers reject it, and it is a clear sign of misconfiguration).
 
+## Forwarded Headers / Real Client IP
+
+Behind a load balancer / ingress, `RemoteIpAddress` is the proxy, not the client — which silently breaks rate-limit partitioning, `client_ip` audit/logs, and any IP allowlist. `UseForwardedHeaders()` must run **first** in the pipeline (before anything reads the IP or scheme).
+
+- **Anti-spoofing**: trust `X-Forwarded-For`/`-Proto` **only** from explicitly configured proxies — set `KnownProxies` / `KnownIPNetworks` (renamed from `KnownNetworks` in .NET 10) to your edge ranges. Outside Development, if none are configured, the forwarded headers are **ignored** rather than blindly trusted (an attacker must not be able to forge their own client IP). In Development keep the framework default (loopback trusted) so local tooling works.
+
+```csharp
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.ForwardLimit = 1; // one trusted hop (the edge)
+    if (!builder.Environment.IsDevelopment())
+    {
+        o.KnownIPNetworks.Clear(); o.KnownProxies.Clear();
+        foreach (var p in configuredProxies) o.KnownProxies.Add(IPAddress.Parse(p));
+    }
+});
+app.UseForwardedHeaders(); // FIRST
+```
+
 ## Cryptography
 
 - Password hashing: **Argon2id** (preferred) or **bcrypt cost ≥ 12**. PBKDF2 only when FIPS-required (≥ 600 000 iterations SHA-256).
@@ -188,16 +225,18 @@ CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowC
 
 ## Error Handling
 
-- All errors emit `ProblemDetails` (RFC 7807). Always include `traceId = Activity.Current?.TraceId.ToString()`.
-- Production: response carries title, status, traceId. Stack trace and inner exception detail go to logs only, never to the wire.
-- A global exception handler (`UseExceptionHandler` or middleware) wraps every uncaught exception; DB / framework messages never leak.
+- All errors emit `ProblemDetails` (**RFC 9457**, the current problem-details RFC superseding 7807). `application/problem+json`.
+- Implement a global `IExceptionHandler` + `AddProblemDetails`, and use **`CustomizeProblemDetails` to stamp `traceId` + `correlation_id` (+ `instance` = path) on EVERY problem response** — handler-produced and framework-produced (404, 400 model-binding, 415) alike — so all error payloads look identical and are traceable.
+- Production: response carries title, status, traceId, correlation_id. Stack trace and inner exception detail go to logs only, never to the wire.
+- Map known cases: `ValidationException` → 400 `ValidationProblemDetails` (field→errors, see `validation`); **client abort** (cancellation when the client disconnected) → **499**, not 500; `BadHttpRequestException` → its own status.
+- `traceId = Activity.Current?.TraceId.ToString()`. Never let DB / framework messages leak.
 
 ## Structured Logging & Audit
 
-- Serilog (or equivalent). JSON sink. Every log line carries: `traceId`, `userId`, `tenantId`, `route`.
-- **Never log**: passwords, tokens, `Authorization` / `Cookie` headers, full request/response bodies, full PII. Use Serilog destructuring policies + a redactor.
+- **Logging mechanics live in `observability`** (OTel-native `ILogger`→OTLP, key/mask/baggage processors, JSON console, tail sampling). Prefer OTel-native; Serilog only when that isn't possible. Every line carries `trace_id`, `correlation_id`, `user_id`, `route`. This section owns the **redaction policy** that pipeline must enforce.
+- **Never log**: passwords, tokens, `Authorization` / `Cookie` headers, full request/response bodies, full PII. Header logging is an **allow-list** (only known-safe headers); bodies off in Production.
+- **Query strings leak secrets** — `HttpLoggingFields.RequestQuery` logs the raw query, which can carry OAuth `code`/`access_token`, signed-URL `sig`/`signature`, and `api_key`. Never enable it wholesale: log the query through an `IHttpLoggingInterceptor` that **redacts sensitive parameter values** (keep names + safe values for debugging, mask the rest to `***`).
 - **Audit log** in a separate, append-only sink (and ideally signed): auth events (login, logout, failure), role/permission changes, data export, money movement, admin actions.
-- Sampling for high-volume traces (head-based, or tail-based via the OTel collector).
 
 ## EF Core Hardening
 
@@ -228,6 +267,12 @@ CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowC
 - `XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null }`.
 - `BinaryFormatter`, `SoapFormatter`, `NetDataContractSerializer`, `LosFormatter` are **forbidden** (RCE class). Use `System.Text.Json` or `MessagePack` with explicit contracts.
 - If Newtonsoft.Json must be used: `TypeNameHandling = None`. Never `Auto` / `All` / `Objects`.
+
+## Transport (compression & decompression)
+
+- **Request decompression**: `AddRequestDecompression()` + `UseRequestDecompression()` (early, before the body is read) so clients may send `Content-Encoding: br/gzip/deflate`. The decompressed stream stays bounded by Kestrel `MaxRequestBodySize` — that cap is the decompression-bomb defence.
+- **Response compression**: Brotli + gzip, but `EnableForHttps = false` — compressing secret-bearing responses over TLS enables the **BREACH** attack. Opt in per response where safe.
+- **Output cache** (`AddOutputCache`) for cacheable GETs; never cache authenticated/user-varying responses (see HTTP Caching).
 
 ## HTTP Caching
 
@@ -262,10 +307,7 @@ CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowC
 
 ## Observability
 
-- OpenTelemetry. W3C TraceContext propagated end-to-end (inbound + outbound).
-- `ActivitySource` per module; tag `user.id`, `tenant.id`, `http.route` (low-cardinality only — no free-form strings).
-- Correlation id middleware: accept `X-Correlation-Id` if present, otherwise generate; echo on the response.
-- **RED metrics** per endpoint (Rate, Errors, Duration). SLOs with burn-rate alerts.
+Owned by the **`observability`** skill — OpenTelemetry-native traces/metrics/logs over OTLP, `correlation_id`/baggage, health probes, and SLO/burn-rate alerting all live there. From a hardening standpoint just enforce: telemetry exists and is wired; `correlation_id` echoed; **RED + USE** with SLOs and multi-window burn-rate alerts; redaction policy (above) honoured by the logging pipeline.
 
 ## API Versioning & Lifecycle
 
@@ -277,7 +319,7 @@ CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowC
 
 - Every handler signature accepts `CancellationToken` and propagates it (`DbContext`, `HttpClient`, downstream calls). Handlers that ignore the token are blocked in review.
 - Per-request timeout middleware: 30 s default; lower for read paths.
-- Graceful shutdown: subscribe to `IHostApplicationLifetime.ApplicationStopping` to drain in-flight work; configure host `ShutdownTimeout` greater than the drain budget.
+- Graceful shutdown: subscribe to `IHostApplicationLifetime.ApplicationStopping` to drain in-flight work; configure host `ShutdownTimeout` greater than the drain budget. Pair it with a readiness check that flips Unhealthy on `ApplicationStopping` so the LB drains first (see `observability` → Health checks).
 
 ## CI / Test Security
 
@@ -289,6 +331,7 @@ CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowC
 
 ## Related skills
 
+- `observability` — OTel-native traces/metrics/logs, correlation/baggage, health probes, SLO/alerting (the logging pipeline that enforces this skill's redaction policy).
 - `validation` — DTO/serialization input limits, `InputLimits`, length-typed VOs.
 - `web-api` — endpoint/handler shape these policies attach to.
 - `ddd` — outbox/domain-event and module boundaries.
