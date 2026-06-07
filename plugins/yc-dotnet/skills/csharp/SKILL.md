@@ -121,8 +121,51 @@ foreach (var customer in customers)
 - Prefer `IEnumerable<T>` over `List<T>` when callers only enumerate.
 - Prefer arrays over `List<T>` for fixed-size collections.
 - Use `IAsyncEnumerable<T>` for async streams instead of materialized lists.
-- Replace magic numbers/strings with `const`. If non-compile-time, use `static readonly`.
 - Prefer singleton lifetime over scoped when state allows.
+- **`FrozenSet<T>` / `FrozenDictionary<K,V>`** for static, read-mostly lookup sets built once at startup (sensitive-key sets, scope tables, allow-lists) — faster reads than `HashSet`/`Dictionary`.
+- **Time-ordered ids**: `Guid.CreateVersion7()` (UUIDv7) for entity/message/correlation ids — index-friendly (monotonic) unlike random v4.
+
+### Hot-path allocation discipline
+
+On per-request / per-record / per-message paths (middleware, log/OTel processors, serializers), allocation is the cost — be deliberate:
+
+- Allocate **nothing** when there's nothing to do (early-return before building a list); build **one pre-sized** collection when you must.
+- Prefer **struct enumerators** and indexer loops over LINQ; LINQ materialization and iterator objects are real allocations here.
+- Read a **known key set directly** (e.g. `Activity.GetBaggageItem(key)`) instead of enumerating a collection whose getter allocates an iterator (`Activity.Baggage`).
+- **Cache** reflection results, compiled delegates, and converted strings; use `ReferenceEquals` fast-paths when an unchanged value is cached as the same instance.
+- Keep these tricks **out of cold paths** — readability wins everywhere that isn't measured-hot.
+
+## Constants & cross-cutting names
+
+- **No magic strings or numbers.** Compile-time → `const`; non-compile-time → `static readonly`. (Input size/length limits live in `InputLimits` — see `validation`.)
+- **Cross-cutting names get a single source of truth.** HTTP header names, claim types, baggage/log attribute keys, policy names, queue/topic names, message-header names — define them **once** in a shared-kernel static class (e.g. `TelemetryConstants`, `MessageHeaders`) so the producer, the logs, and the consumer all agree. Duplicated literals that must match across layers are a defect.
+- Options types carry their config path as a `public const string SectionName`.
+
+## Options pattern (fail-fast)
+
+Bind configuration to a typed options class and **validate at startup** — a misconfigured deployment crashes on boot with a clear message, not at the first request.
+
+```csharp
+services.AddOptions<JwtOptions>()
+    .BindConfiguration(JwtOptions.SectionName)
+    .ValidateDataAnnotations()
+    .Validate(o => o.Mode != JwtMode.Symmetric || !string.IsNullOrWhiteSpace(o.SigningKey),
+              "SigningKey required when Mode=Symmetric") // cross-field rules
+    .ValidateOnStart();
+```
+
+Options classes are sealed, immutable where possible, and annotated (`[Required]`, `[Range]`). Read raw `IConfiguration` only at composition time.
+
+## Cross-cutting via extension members
+
+- One cross-cutting concern per file, exposed as an `AddX(this WebApplicationBuilder)` / `UseX(this WebApplication)` pair, so `Program.cs` stays a thin, readable list of capabilities.
+- Use C# **extension members** (`extension(IServiceCollection services) { public IServiceCollection AddX() {…} }`) to group related extensions cleanly.
+- **Endpoint opt-in conventions**: a marker metadata type + a `.RequireX()` extension on `IEndpointConventionBuilder` + a `context.GetEndpoint()?.Metadata.GetMetadata<T>()` read in the middleware (e.g. `.RequireIdempotency()`, `.RequireScope("…")`, `.SuppressLogging()`). Declarative at the route, enforced in one middleware.
+
+## Visibility
+
+- `sealed` by default; open a type for inheritance only deliberately.
+- Prefer `internal` for building-block types; expose to the test project with `[assembly: InternalsVisibleTo("…UnitTests")]` rather than making them `public`.
 
 ## Decision Notes
 
@@ -135,4 +178,5 @@ foreach (var customer in customers)
 - `web-api` — endpoint/handler/slice shape.
 - `validation` — length-typed VOs, request limits.
 - `hardening` — security/ops for exposed services.
+- `observability` — where the cross-cutting constants, alloc-minimal processors, and `Guid.CreateVersion7` ids are exercised.
 - `testing` — how the tests for this code are written (xUnit/Shouldly/NSubstitute/Testcontainers).

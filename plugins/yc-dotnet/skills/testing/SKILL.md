@@ -144,9 +144,66 @@ public abstract class IntegrationTestBase(PostgresFixture fixture) : IAsyncLifet
 }
 ```
 
-- API-level integration uses `WebApplicationFactory<TEntryPoint>` with the container's connection string injected via config override.
+- API-level integration uses `WebApplicationFactory<TEntryPoint>`; inject the container connection strings + any config via `host.UseSetting("Section:Key", value)`.
+- Kafka / Redis (and a Debezium connect container, when the outbox pipeline is under test) follow the same `IAsyncLifetime` fixture pattern as Postgres.
+- Set `OTEL_SDK_DISABLED=true` in the factory so exporters don't dial a dead `localhost:4317` (connection-refused noise + shutdown flush delay).
 - Assert real HTTP behavior the hardening rules promise: `ProblemDetails` shape, security headers, `429` envelope (see `hardening`).
 - Every test that touches I/O passes a `CancellationToken`.
+
+## Testing middleware & Activity/baggage
+
+Middleware that reads/sets `Activity.Current` (correlation id, baggage enrichment) is tested with a `DefaultHttpContext` + a live `ActivityListener` — no host needed.
+
+```csharp
+private static ActivityListener StartListening()
+{
+    var listener = new ActivityListener
+    {
+        ShouldListenTo = _ => true,
+        Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+    };
+    ActivitySource.AddActivityListener(listener);
+    return listener;
+}
+
+[Fact]
+public async Task Stamps_user_id_on_baggage_when_authenticated()
+{
+    using var listener = StartListening();
+    using var source = new ActivitySource("test");
+    using var activity = source.StartActivity("req")!;
+
+    var ctx = new DefaultHttpContext
+    {
+        User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "u-1")], "jwt"))
+    };
+
+    await new UserContextMiddleware(_ => Task.CompletedTask).InvokeAsync(ctx);
+
+    activity.GetBaggageItem("user_id").ShouldBe("u-1");
+}
+```
+
+## Auth integration tests
+
+For JWT-protected endpoints, mint a token in-test that the booted app accepts. Configure the app for **symmetric (HS256)** in the factory (`UseSetting` the issuer/audience/signing key) and sign with the same key:
+
+```csharp
+public string MintToken(params string[] scopes)
+{
+    var descriptor = new SecurityTokenDescriptor
+    {
+        Issuer = JwtIssuer, Audience = JwtAudience, Expires = DateTime.UtcNow.AddMinutes(5),
+        SigningCredentials = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtSigningKey)), SecurityAlgorithms.HmacSha256),
+        Claims = new Dictionary<string, object> { ["sub"] = "test-user" }
+    };
+    if (scopes.Length > 0) descriptor.Claims["scope"] = string.Join(' ', scopes);
+    return new JsonWebTokenHandler().CreateToken(descriptor);
+}
+```
+
+Assert the matrix: no token → **401** (`application/problem+json`); valid token without the required scope → **403**; correctly-scoped token → **200**.
 
 ## Architecture tests (DDD boundaries)
 
@@ -191,3 +248,4 @@ Minimum rules: Domain depends on nothing outward; Application never references I
 - `web-api` — endpoints exercised by integration tests.
 - `validation` — `InputLimits`/VO rules asserted in unit tests.
 - `hardening` — CI gates, mutation testing, security-header/`429` assertions.
+- `observability` — `ActivityListener` middleware tests; `OTEL_SDK_DISABLED` in integration tests.

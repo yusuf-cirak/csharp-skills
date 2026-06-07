@@ -65,6 +65,28 @@ RuleFor(x => x.Title).NotEmpty(); // missing MaximumLength
 RuleFor(x => x.Tags).NotNull();   // missing count cap
 ```
 
+## 3b. Validators run in the pipeline (MediatR behavior)
+
+Validators MUST execute **before** the handler, automatically — not by a hand-written `Validate()` call the developer can forget. Register a MediatR `IPipelineBehavior` that runs every `IValidator<TRequest>` and short-circuits on failure.
+
+```csharp
+public sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidator<TRequest>> validators)
+    : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+{
+    public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken ct)
+    {
+        if (!validators.Any()) return await next(ct);
+        var ctx = new ValidationContext<TRequest>(request);
+        var failures = (await Task.WhenAll(validators.Select(v => v.ValidateAsync(ctx, ct))))
+            .SelectMany(r => r.Errors).Where(f => f is not null).ToArray();
+        if (failures.Length != 0) throw new ValidationException(failures);
+        return await next(ct);
+    }
+}
+```
+
+Wire it with `cfg.AddOpenBehavior(typeof(ValidationBehavior<,>))` + `services.AddValidatorsFromAssemblies(assemblies, includeInternalTypes: true)`. The thrown `ValidationException` is mapped by the global handler to a **RFC 9457 `ValidationProblemDetails`** (HTTP 400, `errors` = field → messages) — see `hardening` → Error Handling. Handlers then assume a valid request.
+
 ## 4. Global `JsonSerializerOptions` hardening
 
 Configure once in `Program.cs` or `DependencyInjection.Serialization.cs`. Apply to both `ConfigureHttpJsonOptions` (Minimal APIs / FastEndpoints) and `AddJsonOptions` (MVC) where used.
