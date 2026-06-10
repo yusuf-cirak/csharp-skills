@@ -49,3 +49,4 @@ These live under `references/` next to this router; sub-skills link to them by r
 - `references/value-object-base.md` — `ValueObject`/`ValueObject<T>` base, `Text` example, JSON + EF converters.
 - `references/input-limits.md` — the `InputLimits` constants class.
 - `references/monads.md` — `Result<T>`/`Option<T>` library selection (YC.Monad first) and usage.
+- `references/state-as-types.md` — polymorphic state machine (Transfer/FourEyesApproval): capability interfaces, `Try*` transitions, construction-time guard, relational two-model + document-store JSON persistence.

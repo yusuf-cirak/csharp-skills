@@ -16,6 +16,10 @@ Owns **where domain logic lives** and how the solution is structured. Record/val
 - Validation goes in the factory method. Return a monad type (`Result<T>` / `Option<T>` — from YC.Monad if available, otherwise the codebase's existing equivalent) when validation can fail. See `../index/references/monads.md`.
 - Use **value objects** for complex primitives. Base type: `../index/references/value-object-base.md`.
 - Use **discriminated unions** for types with multiple variants.
+- Model aggregate/entity **state machines as types**, not boolean flags or a status enum: sealed
+  per-state subtypes that expose only their legal operations, a DU for the state payload, capability
+  interfaces, and `Try*` pattern-matched transitions. Persistence keeps the rich domain model separate
+  from the flat DB shape (or stores polymorphic JSON). Full pattern: `../index/references/state-as-types.md`.
 
 ## Modular Monolith Architecture
 

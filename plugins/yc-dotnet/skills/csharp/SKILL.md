@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, and `Span<T>`/`IEnumerable<T>` performance rules. MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
+description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, polymorphic state machines (state-as-types over boolean flags), value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, and `Span<T>`/`IEnumerable<T>` performance rules. MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
 ---
 
 # C# Language & Style
@@ -35,6 +35,26 @@ The user's permanent C# language idioms. Apply by default to any `.cs` edit. If 
 - Entire union lives in one file.
 - One static factories class per union, one factory method per variant.
 - All record-design rules above still apply.
+
+## State as types (no boolean flags)
+
+When an entity moves through a finite set of states with **state-specific operations**, model the
+state as types, not `bool` flags or a status enum guarded by `if`-`else`. Make illegal states
+unrepresentable:
+
+- State payload → a **discriminated union**; entity → an abstract base + sealed per-state subtypes.
+- Expose an operation **only on the states where it is legal** (e.g. `Execute` lives only on the
+  approved subtype — no runtime "is it approved?" check).
+- Mark transition capabilities with **interfaces** (`IApprovable`/`IRejectable`); drive transitions
+  with `Try*` methods that **pattern-match** and return a new immutable state — never `if`-`else`,
+  never mutate.
+- Guard subtype construction so a subtype can only wrap its allowed states (`Assert<T1,T2>()`).
+- `_ => throw` arms are for genuinely-impossible states only; expected outcomes return a state.
+
+Full worked example (four-eyes `Transfer`), plus relational two-model persistence and document-store
+polymorphic JSON, in the shared reference:
+
+→ `../index/references/state-as-types.md`
 
 ## Value Objects
 
