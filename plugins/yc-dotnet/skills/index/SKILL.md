@@ -1,11 +1,11 @@
 ---
 name: index
-description: Entry-point INDEX & router for the user's personal C# / .NET / ASP.NET Core standards. Contains no rules itself — it dispatches to six focused sub-skills (`csharp`, `ddd`, `web-api`, `validation`, `hardening`, `testing`). Invoke this FIRST whenever any C# / .NET / ASP.NET Core work is starting (writing, editing, reviewing, or generating `.cs` / `.csproj` / `.slnx` / `.razor` / `.cshtml` / `Directory.Build.props` / `global.json`), or whenever the user references "the coding standards" generically. Reads the dispatch table below, then invokes EVERY sub-skill the activity calls for (multiple usually apply). MUST be consulted before touching C# even if the user does not mention the standards.
+description: Entry-point INDEX & router for the user's personal C# / .NET / ASP.NET Core standards. Contains no rules itself — it dispatches to seven focused sub-skills (`csharp`, `ddd`, `web-api`, `validation`, `hardening`, `observability`, `testing`). Invoke this FIRST whenever any C# / .NET / ASP.NET Core work is starting (writing, editing, reviewing, or generating `.cs` / `.csproj` / `.slnx` / `.razor` / `.cshtml` / `Directory.Build.props` / `global.json`), or whenever the user references "the coding standards" generically. Reads the dispatch table below, then invokes EVERY sub-skill the activity calls for (multiple usually apply). MUST be consulted before touching C# even if the user does not mention the standards.
 ---
 
 # C# / .NET Standards — Router (yc-dotnet:index)
 
-The user's permanent C# rules, split into six focused sub-skills so concerns stop bleeding into each other. **This file holds no rules — it routes.** Read the dispatch table; invoke EVERY sub-skill the current activity matches. `csharp` is the always-on base layer; layer the others on top as needed.
+The user's permanent C# rules, split into seven focused sub-skills so concerns stop bleeding into each other. **This file holds no rules — it routes.** Read the dispatch table; invoke EVERY sub-skill the current activity matches. `csharp` is the always-on base layer; layer the others on top as needed.
 
 ## How to use this router
 
@@ -22,7 +22,8 @@ The user's permanent C# rules, split into six focused sub-skills so concerns sto
 | Modeling a domain; aggregates/entities/domain events; module & layer layout (Modular Monolith); where a vertical slice lives | **`yc-dotnet:ddd`** |
 | Writing endpoints/handlers/controllers; MediatR commands/queries; slice skeleton; FluentValidation basics; pagination shape | **`yc-dotnet:web-api`** |
 | Request DTOs/commands/queries; input size/length/depth limits; `InputLimits`; length-typed `Text` VOs; JSON/Kestrel/FormOptions hardening; mandatory validator rules; output encoding | **`yc-dotnet:validation`** |
-| Hardening an exposed/multi-tenant service; rate limiting; idempotency; authn/authz; security headers; crypto; logging/audit; EF hardening; file upload; SSRF; deserialization; observability; CI security | **`yc-dotnet:hardening`** |
+| Hardening an exposed/multi-tenant service; rate limiting; idempotency; authn/authz (JWT bearer hardening, scopes); forwarded headers; security headers; crypto; ProblemDetails/error handling; HTTP-logging redaction; EF hardening; file upload; SSRF; deserialization; CI security | **`yc-dotnet:hardening`** |
+| Instrumenting a service; OpenTelemetry traces/metrics/logs; `ActivitySource`/`Meter`; correlation_id/baggage; structured logging processors; sampling; health checks/probes; SLO & burn-rate alerting; telemetry wiring in `Program.cs` | **`yc-dotnet:observability`** |
 | Writing tests; `[Fact]`/`[Theory]`; fixtures/test doubles; integration tests; setting up a test project (xUnit + Shouldly + NSubstitute + Testcontainers + Bogus + NetArchTest) | **`yc-dotnet:testing`** |
 
 Typical combinations:
@@ -32,7 +33,9 @@ Typical combinations:
 - **Endpoint/handler change without new domain** → `csharp` + `web-api` + `validation` (+ `testing`).
 - **Security review of a service** → `hardening` (+ `validation` for the DTO surface).
 - **New test project / test fixture** → `testing` (+ `csharp` for idioms).
-- **Production rollout / deployment hardening** → `hardening` (+ `validation` for input limits).
+- **Instrumenting / telemetry / health checks** → `observability` (+ `csharp` for constants & alloc-minimal processors, + `hardening` for redaction policy).
+- **New service bootstrap / Program.cs wiring** → `hardening` + `observability` + `validation` (+ `csharp`).
+- **Production rollout / deployment hardening** → `hardening` + `observability` (+ `validation` for input limits).
 
 ## Decision Notes (global tie-breakers)
 
@@ -46,3 +49,4 @@ These live under `references/` next to this router; sub-skills link to them by r
 - `references/value-object-base.md` — `ValueObject`/`ValueObject<T>` base, `Text` example, JSON + EF converters.
 - `references/input-limits.md` — the `InputLimits` constants class.
 - `references/monads.md` — `Result<T>`/`Option<T>` library selection (YC.Monad first) and usage.
+- `references/state-as-types.md` — polymorphic state machine (Transfer/FourEyesApproval): capability interfaces, `Try*` transitions, construction-time guard, relational two-model + document-store JSON persistence.
