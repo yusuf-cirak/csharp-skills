@@ -22,10 +22,21 @@ Shared `references/` (single source of truth) live next to the router under `ind
 
 ```
 /plugin marketplace add yusuf-cirak/csharp-skills
-/plugin install yc-dotnet@yc
+/plugin install yc-dotnet@yusufcirak
 ```
 
 (Local testing before push: `/plugin marketplace add C:/Users/yusuf.cirak/repos/claude-csharp-standards`.)
+
+Already installed under the old `@yc` name? The marketplace key does not re-key in place — re-register once:
+
+```
+/plugin marketplace remove yc
+/plugin marketplace add https://github.com/yusuf-cirak/csharp-skills
+/plugin install yc-dotnet@yusufcirak
+/reload-plugins
+```
+
+(Plugin name `yc-dotnet` and the `yc-dotnet:*` skill namespaces are unchanged, so any global `CLAUDE.md` block keeps working.)
 
 ## After installing — remove the loose copies
 
@@ -43,4 +54,8 @@ The global `~/.claude/CLAUDE.md` block that names `yc-dotnet:index` as the manda
 
 ## Editing workflow
 
-Edit the canonical copies under `plugins/yc-dotnet/skills/...`, bump `version` in `plugins/yc-dotnet/.claude-plugin/plugin.json`, commit, then `/plugin marketplace update yc` on installed machines to pull the new version.
+Edit the canonical copies under `plugins/yc-dotnet/skills/...`, bump `version` in `plugins/yc-dotnet/.claude-plugin/plugin.json`, commit, then `/plugin marketplace update yusufcirak` on installed machines to pull the new version.
+
+## opencode
+
+These same skills work in [opencode](https://opencode.ai) — it reads `SKILL.md` natively and has a `skill` tool. See [`opencode/README.md`](opencode/README.md) to sync the 8 skills into opencode and enable the same auto-routing via `AGENTS.md`.
