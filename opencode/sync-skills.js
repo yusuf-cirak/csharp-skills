@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Sync the yc-dotnet skills into opencode's global skills dir so opencode discovers them.
+// Sync the dotnet skills into opencode's global skills dir so opencode discovers them.
 //
 //   node opencode/sync-skills.js          # copy (default, cross-platform safe)
 //   node opencode/sync-skills.js --link   # symlink each skill (true single-source; Windows
@@ -15,8 +15,8 @@ const path = require("path");
 
 const link = process.argv.includes("--link");
 
-// repo/plugins/yc-dotnet/skills  (this file lives at repo/opencode/sync-skills.js)
-const srcRoot = path.resolve(__dirname, "..", "plugins", "yc-dotnet", "skills");
+// repo/plugins/dotnet/skills  (this file lives at repo/opencode/sync-skills.js)
+const srcRoot = path.resolve(__dirname, "..", "plugins", "dotnet", "skills");
 const destRoot = path.join(os.homedir(), ".config", "opencode", "skills");
 
 if (!fs.existsSync(srcRoot)) {

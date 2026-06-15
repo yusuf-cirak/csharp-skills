@@ -1,20 +1,20 @@
 # csharp-skills
 
-Personal C# / .NET / ASP.NET Core coding standards, packaged as a Claude Code plugin (`yc-dotnet`) so they install on any machine without re-copying skill files into `~/.claude/skills`.
+Personal C# / .NET / ASP.NET Core coding standards, packaged as a Claude Code plugin (`dotnet`) so they install on any machine without re-copying skill files into `~/.claude/skills`.
 
 ## What's inside
 
-A 7-skill family (plugin name: `yc-dotnet`) fronted by a thin **router** (no rules, just a dispatch table + shared `references/`):
+A 7-skill family (plugin name: `dotnet`) fronted by a thin **router** (no rules, just a dispatch table + shared `references/`):
 
 | Skill | Scope |
 |---|---|
-| `yc-dotnet:index` | Router / index — dispatches to the others |
-| `yc-dotnet:csharp` | Always-on base: namespaces, immutable records + factories, DUs, value objects, monads, LINQ, performance |
-| `yc-dotnet:ddd` | DDD tactical patterns, Modular Monolith + Vertical Slice layout |
-| `yc-dotnet:web-api` | Endpoint/handler/slice shape, MediatR/FastEndpoints, FluentValidation basics, pagination |
-| `yc-dotnet:validation` | `InputLimits`, length-typed `Text` VOs, validator rules, JSON/Kestrel hardening, output encoding |
-| `yc-dotnet:hardening` | Rate limiting, idempotency, authn/authz, headers, crypto, EF hardening, SSRF, observability, CI |
-| `yc-dotnet:testing` | xUnit + Shouldly + NSubstitute + Testcontainers + Bogus + NetArchTest |
+| `dotnet:index` | Router / index — dispatches to the others |
+| `dotnet:csharp` | Always-on base: namespaces, immutable records + factories, DUs, value objects, monads, LINQ, performance |
+| `dotnet:ddd` | DDD tactical patterns, Modular Monolith + Vertical Slice layout |
+| `dotnet:web-api` | Endpoint/handler/slice shape, MediatR/FastEndpoints, FluentValidation basics, pagination |
+| `dotnet:validation` | `InputLimits`, length-typed `Text` VOs, validator rules, JSON/Kestrel hardening, output encoding |
+| `dotnet:hardening` | Rate limiting, idempotency, authn/authz, headers, crypto, EF hardening, SSRF, observability, CI |
+| `dotnet:testing` | xUnit + Shouldly + NSubstitute + Testcontainers + Bogus + NetArchTest |
 
 Shared `references/` (single source of truth) live next to the router under `index/references/`: `value-object-base.md`, `input-limits.md`, `monads.md`. Cross-skill links are **relative** (`../index/references/...`) so they resolve both as a plugin and as loose `~/.claude/skills`.
 
@@ -22,7 +22,7 @@ Shared `references/` (single source of truth) live next to the router under `ind
 
 ```
 /plugin marketplace add yusuf-cirak/csharp-skills
-/plugin install yc-dotnet@yusufcirak
+/plugin install dotnet@yusufcirak
 ```
 
 (Local testing before push: `/plugin marketplace add C:/Users/yusuf.cirak/repos/claude-csharp-standards`.)
@@ -32,11 +32,11 @@ Already installed under the old `@yc` name? The marketplace key does not re-key 
 ```
 /plugin marketplace remove yc
 /plugin marketplace add https://github.com/yusuf-cirak/csharp-skills
-/plugin install yc-dotnet@yusufcirak
+/plugin install dotnet@yusufcirak
 /reload-plugins
 ```
 
-(Plugin name `yc-dotnet` and the `yc-dotnet:*` skill namespaces are unchanged, so any global `CLAUDE.md` block keeps working.)
+(The plugin was renamed `yc-dotnet` → `dotnet`, so skill namespaces are now `dotnet:*`. If your global `CLAUDE.md` references the old `yc-dotnet:index`, update it to `dotnet:index`.)
 
 ## After installing — remove the loose copies
 
@@ -50,11 +50,11 @@ aspnetcore-production-hardening/  csharp-testing/
 
 ## CLAUDE.md note
 
-The global `~/.claude/CLAUDE.md` block that names `yc-dotnet:index` as the mandatory entry point is **user config**, not a plugin artifact — it does not ship in this plugin. Keep it in your own dotfiles. The skill `description` fields already carry the "MUST be used" triggers, so the standards still activate without it; the CLAUDE.md block just reinforces routing through `yc-dotnet:index`.
+The global `~/.claude/CLAUDE.md` block that names `dotnet:index` as the mandatory entry point is **user config**, not a plugin artifact — it does not ship in this plugin. Keep it in your own dotfiles. The skill `description` fields already carry the "MUST be used" triggers, so the standards still activate without it; the CLAUDE.md block just reinforces routing through `dotnet:index`.
 
 ## Editing workflow
 
-Edit the canonical copies under `plugins/yc-dotnet/skills/...`, bump `version` in `plugins/yc-dotnet/.claude-plugin/plugin.json`, commit, then `/plugin marketplace update yusufcirak` on installed machines to pull the new version.
+Edit the canonical copies under `plugins/dotnet/skills/...`, bump `version` in `plugins/dotnet/.claude-plugin/plugin.json`, commit, then `/plugin marketplace update yusufcirak` on installed machines to pull the new version.
 
 ## opencode
 

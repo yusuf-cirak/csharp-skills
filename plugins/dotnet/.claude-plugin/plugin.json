@@ -1,5 +1,5 @@
 {
-  "name": "yc-dotnet",
+  "name": "dotnet",
   "version": "2.3.0",
   "description": "Personal C# / .NET / ASP.NET Core coding standards: a focused 8-skill family (csharp, ddd, web-api, validation, hardening, observability, testing) fronted by a thin index router with shared references.",
   "author": {

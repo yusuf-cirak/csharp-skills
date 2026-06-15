@@ -3,7 +3,7 @@ name: index
 description: Entry-point INDEX & router for the user's personal C# / .NET / ASP.NET Core standards. Contains no rules itself — it dispatches to seven focused sub-skills (`csharp`, `ddd`, `web-api`, `validation`, `hardening`, `observability`, `testing`). Invoke this FIRST whenever any C# / .NET / ASP.NET Core work is starting (writing, editing, reviewing, or generating `.cs` / `.csproj` / `.slnx` / `.razor` / `.cshtml` / `Directory.Build.props` / `global.json`), or whenever the user references "the coding standards" generically. Reads the dispatch table below, then invokes EVERY sub-skill the activity calls for (multiple usually apply). MUST be consulted before touching C# even if the user does not mention the standards.
 ---
 
-# C# / .NET Standards — Router (yc-dotnet:index)
+# C# / .NET Standards — Router (dotnet:index)
 
 The user's permanent C# rules, split into seven focused sub-skills so concerns stop bleeding into each other. **This file holds no rules — it routes.** Read the dispatch table; invoke EVERY sub-skill the current activity matches. `csharp` is the always-on base layer; layer the others on top as needed.
 
@@ -11,20 +11,20 @@ The user's permanent C# rules, split into seven focused sub-skills so concerns s
 
 1. Identify what the current task touches (any combination of: domain modeling, endpoints/handlers, request DTOs/validation, ops/security hardening, tests).
 2. Look up each matching row in the dispatch table below.
-3. Invoke EVERY matched sub-skill via the Skill tool (`yc-dotnet:<short>`). Do not stop at one — combinations are the norm.
-4. Always also invoke `yc-dotnet:csharp` for any `.cs` edit.
+3. Invoke EVERY matched sub-skill via the Skill tool (`dotnet:<short>`). Do not stop at one — combinations are the norm.
+4. Always also invoke `dotnet:csharp` for any `.cs` edit.
 
 ## Dispatch table — activity → skill
 
 | You are doing… | Invoke |
 |---|---|
-| ANY `.cs` edit; records, value objects, DUs, monads, LINQ, immutability, naming, performance | **`yc-dotnet:csharp`** (always) |
-| Modeling a domain; aggregates/entities/domain events; module & layer layout (Modular Monolith); where a vertical slice lives | **`yc-dotnet:ddd`** |
-| Writing endpoints/handlers/controllers; MediatR commands/queries; slice skeleton; FluentValidation basics; pagination shape | **`yc-dotnet:web-api`** |
-| Request DTOs/commands/queries; input size/length/depth limits; `InputLimits`; length-typed `Text` VOs; JSON/Kestrel/FormOptions hardening; mandatory validator rules; output encoding | **`yc-dotnet:validation`** |
-| Hardening an exposed/multi-tenant service; rate limiting; idempotency; authn/authz (JWT bearer hardening, scopes); forwarded headers; security headers; crypto; ProblemDetails/error handling; HTTP-logging redaction; EF hardening; file upload; SSRF; deserialization; CI security | **`yc-dotnet:hardening`** |
-| Instrumenting a service; OpenTelemetry traces/metrics/logs; `ActivitySource`/`Meter`; correlation_id/baggage; structured logging processors; sampling; health checks/probes; SLO & burn-rate alerting; telemetry wiring in `Program.cs` | **`yc-dotnet:observability`** |
-| Writing tests; `[Fact]`/`[Theory]`; fixtures/test doubles; integration tests; setting up a test project (xUnit + Shouldly + NSubstitute + Testcontainers + Bogus + NetArchTest) | **`yc-dotnet:testing`** |
+| ANY `.cs` edit; records, value objects, DUs, monads, LINQ, immutability, naming, performance | **`dotnet:csharp`** (always) |
+| Modeling a domain; aggregates/entities/domain events; module & layer layout (Modular Monolith); where a vertical slice lives | **`dotnet:ddd`** |
+| Writing endpoints/handlers/controllers; MediatR commands/queries; slice skeleton; FluentValidation basics; pagination shape | **`dotnet:web-api`** |
+| Request DTOs/commands/queries; input size/length/depth limits; `InputLimits`; length-typed `Text` VOs; JSON/Kestrel/FormOptions hardening; mandatory validator rules; output encoding | **`dotnet:validation`** |
+| Hardening an exposed/multi-tenant service; rate limiting; idempotency; authn/authz (JWT bearer hardening, scopes); forwarded headers; security headers; crypto; ProblemDetails/error handling; HTTP-logging redaction; EF hardening; file upload; SSRF; deserialization; CI security | **`dotnet:hardening`** |
+| Instrumenting a service; OpenTelemetry traces/metrics/logs; `ActivitySource`/`Meter`; correlation_id/baggage; structured logging processors; sampling; health checks/probes; SLO & burn-rate alerting; telemetry wiring in `Program.cs` | **`dotnet:observability`** |
+| Writing tests; `[Fact]`/`[Theory]`; fixtures/test doubles; integration tests; setting up a test project (xUnit + Shouldly + NSubstitute + Testcontainers + Bogus + NetArchTest) | **`dotnet:testing`** |
 
 Typical combinations:
 

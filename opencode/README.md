@@ -1,9 +1,9 @@
-# yc-dotnet for opencode
+# dotnet for opencode
 
-The same C# / .NET standards that ship as the Claude Code plugin `yc-dotnet` also run in
+The same C# / .NET standards that ship as the Claude Code plugin `dotnet` also run in
 [opencode](https://opencode.ai). opencode reads `SKILL.md` files natively and has a built-in
 `skill` tool, so the **same skill files** are reused — no duplication, single source of truth
-under `../plugins/yc-dotnet/skills/`.
+under `../plugins/dotnet/skills/`.
 
 opencode plugins can't inject the system prompt, so the always-on router instruction lives in
 `AGENTS.md` (the opencode equivalent of the Claude Code `SessionStart` hook).
@@ -46,7 +46,7 @@ array in `opencode.json` instead:
 ## Usage
 
 In a C# / .NET context, opencode invokes the router first, then the dispatched sub-skills —
-by **bare name** (the `yc-dotnet:` prefix in the router text is the Claude Code namespace; ignore
+by **bare name** (the `dotnet:` prefix in the router text is the Claude Code namespace; ignore
 it here):
 
 ```
@@ -57,6 +57,6 @@ skill({ name: "web-api" })  # + whatever else the activity matches
 
 ## Keeping in sync
 
-The skills are edited once under `../plugins/yc-dotnet/skills/`. After editing, re-run
+The skills are edited once under `../plugins/dotnet/skills/`. After editing, re-run
 `node opencode/sync-skills.js` (copy mode) — or use `--link` once so future edits propagate
 without re-running.

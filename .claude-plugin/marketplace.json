@@ -6,8 +6,8 @@
   },
   "plugins": [
     {
-      "name": "yc-dotnet",
-      "source": "./plugins/yc-dotnet",
+      "name": "dotnet",
+      "source": "./plugins/dotnet",
       "description": "Personal C# / .NET / ASP.NET Core coding standards as an 8-skill family (csharp, ddd, web-api, validation, hardening, observability, testing) behind a router (index)."
     }
   ]
