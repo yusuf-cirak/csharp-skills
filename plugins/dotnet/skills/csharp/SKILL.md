@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, polymorphic state machines (state-as-types over boolean flags), value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, and `Span<T>`/`IEnumerable<T>` performance rules. MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
+description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, polymorphic state machines (state-as-types over boolean flags), value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, `Span<T>`/`IEnumerable<T>` performance rules, and Microsoft framework-author conventions (field/visibility naming, library async discipline with `ConfigureAwait(false)`/`ValueTask`/`CancellationToken`, hot-path perf primitives, framework/DI surface, XML docs). MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
 ---
 
 # C# Language & Style
@@ -13,6 +13,20 @@ The user's permanent C# language idioms. Apply by default to any `.cs` edit. If 
 - One type per file. Exception: a type used only within a single file may stay in that file.
 - Use `GlobalUsings.cs` to keep files clean.
 - Register services in `DependencyInjection.cs`. Split into partials like `DependencyInjection.Database.cs`, `DependencyInjection.Observability.cs` to keep registration readable.
+
+## Naming & layout (Microsoft framework style)
+
+Match the dotnet/runtime / EF Core / ASP.NET Core source conventions for the mechanical bits:
+
+- Private instance fields: `_camelCase` (`private readonly ISqlExpressionFactory _sqlFactory;`).
+- Static fields: `s_` prefix; thread-static fields: `t_` prefix.
+- Always write the visibility modifier, first, even when it is the default `private`
+  (`private static`, not `static`; `abstract`/`virtual` come after visibility).
+- Language keywords over BCL type names: `int`/`string`/`float`, never `Int32`/`String`/`Single`.
+- `var` only when the type is explicit on the right-hand side (a `new`, cast, or literal); spell the
+  type out when the RHS is a method call whose return type isn't obvious.
+- `using` order: `System.*` first, then everything else, each group sorted (`GlobalUsings.cs` still
+  carries the cross-file set).
 
 ## Immutability
 
@@ -153,7 +167,22 @@ On per-request / per-record / per-message paths (middleware, log/OTel processors
 - Prefer **struct enumerators** and indexer loops over LINQ; LINQ materialization and iterator objects are real allocations here.
 - Read a **known key set directly** (e.g. `Activity.GetBaggageItem(key)`) instead of enumerating a collection whose getter allocates an iterator (`Activity.Baggage`).
 - **Cache** reflection results, compiled delegates, and converted strings; use `ReferenceEquals` fast-paths when an unchanged value is cached as the same instance.
+- **Microsoft-style primitives** for these paths: `ArrayPool<T>.Shared.Rent(n)` for transient buffers, returned in `finally`; `stackalloc` for small buffers under a ~256-byte ceiling with a heap fallback (`Span<char> b = len <= 256 ? stackalloc char[len] : new char[len];`); `StringBuilder` when concatenating in a loop (never `+=` a string per iteration); `[MethodImpl(MethodImplOptions.AggressiveInlining)]` only on a proven-hot tiny method, with a one-line comment saying why.
+- **Provider query translators are the canonical LINQ-violation site** — the no-LINQ/no-closures rule above applies hardest there.
+- **`readonly struct` escape hatch**: a value object **proven** (benchmark in hand) to allocate on a hot per-row path may become a `readonly struct` instead of a `record` — still immutable, still factory-constructed, kept out of the domain layer. Default stays `record`.
 - Keep these tricks **out of cold paths** — readability wins everywhere that isn't measured-hot.
+
+## Async (library code, Microsoft-style)
+
+Library/framework code runs under callers we don't control — follow the dotnet/runtime + EF Core rules:
+
+- `ConfigureAwait(false)` on **every** `await` in library/framework code. Drop it only in app-level
+  ASP.NET request or UI code where the synchronization context is wanted.
+- Return `ValueTask`/`ValueTask<T>` when the method frequently completes synchronously (cache hits,
+  fast-path lookups) — avoids a per-call `Task` allocation. Use `Task` when it almost always awaits.
+- Thread `CancellationToken` through to every downstream async call; default it as the last public
+  parameter (`CancellationToken cancellationToken = default`).
+- No `async void` except event handlers — an unobserved exception there crashes the process.
 
 ## Constants & cross-cutting names
 
@@ -182,10 +211,41 @@ Options classes are sealed, immutable where possible, and annotated (`[Required]
 - Use C# **extension members** (`extension(IServiceCollection services) { public IServiceCollection AddX() {…} }`) to group related extensions cleanly.
 - **Endpoint opt-in conventions**: a marker metadata type + a `.RequireX()` extension on `IEndpointConventionBuilder` + a `context.GetEndpoint()?.Metadata.GetMetadata<T>()` read in the middleware (e.g. `.RequireIdempotency()`, `.RequireScope("…")`, `.SuppressLogging()`). Declarative at the route, enforced in one middleware.
 
+### Framework / library surface (Microsoft-style)
+
+When authoring a library, NuGet package, or EF Core provider/extension:
+
+- Public DI registration extensions and fluent builders **return the builder/`IServiceCollection`** so
+  calls chain; provider option methods return the same `DbContextOptionsBuilder`.
+- Bundle a service's injected dependencies in a **`sealed record` with `required init` properties**
+  (the EF Core `XxxDependencies` pattern) — immutable, `with`-copyable, one constructor parameter
+  instead of ten. Consistent with records-everywhere.
+- Offer **generic + non-generic overloads** where a caller may hold only a `Type`
+  (`Set<TEntity>()` and `Set(Type entityType)`).
+- Argument guard clauses for programmer error stay exceptions at the public boundary
+  (`ArgumentNullException.ThrowIfNull(x)`) — a contract check, not `Result<T>` error handling.
+- Mark framework-internal public API that is exempt from semver with an internal-API marker attribute
+  (the `[EntityFrameworkInternal]` analog); prefer real `internal` + `[InternalsVisibleTo]` when the
+  surface need not be public at all.
+
+```csharp
+public sealed record TimescaleDbTranslatorDependencies
+{
+    public required ISqlExpressionFactory SqlExpressionFactory { get; init; }
+    public required IRelationalTypeMappingSource TypeMappingSource { get; init; }
+}
+```
+
 ## Visibility
 
 - `sealed` by default; open a type for inheritance only deliberately.
 - Prefer `internal` for building-block types; expose to the test project with `[assembly: InternalsVisibleTo("…UnitTests")]` rather than making them `public`.
+
+## XML docs (Microsoft-style)
+
+- XML doc comments on the public surface of a library/package.
+- `<inheritdoc/>` on overrides and interface implementations instead of copy-pasting summaries.
+- `<see cref="…"/>` for type/member links; `<see href="https://…">` for external links.
 
 ## Decision Notes
 
