@@ -262,6 +262,14 @@ app.UseForwardedHeaders(); // FIRST
 - Outbound connect + total timeout mandatory. Default 5 s connect / 30 s total.
 - `AllowAutoRedirect = false` or constrain redirects to the same origin.
 
+## Resilience (outbound calls)
+
+Every outbound `HttpClient` carries a **Polly v8 resilience pipeline** — don't hand-roll retry/timeout.
+Default to `AddStandardResilienceHandler()` (retry + total/per-try timeout + circuit-breaker + hedging);
+custom pipelines order strategies outer→inner. **Retry only idempotent calls**; jitter is mandatory; the
+SSRF handler composes **inside** the pipeline. Pipelines emit OTel automatically. Full rules + ordering +
+chaos-testing (`AddChaosFault`/Simmy): `../index/references/resilience.md`.
+
 ## XML / Deserialization Safety
 
 - `XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null }`.
@@ -291,6 +299,7 @@ app.UseForwardedHeaders(); // FIRST
 - Handlers MUST be idempotent (dedupe via message id table or natural key).
 - Retry: exponential backoff with jitter, bounded attempts (default 5). Poison messages → DLQ; alert on DLQ depth.
 - Cross-aggregate writes use the **Outbox pattern** — never dual-write to DB + broker.
+- This section owns **distributed/broker** reliability. For a purely **in-process** producer/consumer queue (no broker), use the `System.Threading.Channels` + `BackgroundService` primitive in `csharp` → Background work & channels.
 
 ## Dependency & Supply Chain
 

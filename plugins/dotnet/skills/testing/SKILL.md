@@ -65,15 +65,18 @@ Domain factories/handlers return `Result<T>`/`Option<T>` (see `../index/referenc
 ## Unit tests
 
 - Test domain behavior through factories and methods — they hold the rules.
-- Inject test doubles **only for outbound side-effect ports** (`IClock`, `IEmailSender`, `HttpMessageHandler`, message bus). Pure domain services take real instances.
+- Inject test doubles **only for outbound side-effect ports** (`IEmailSender`, `HttpMessageHandler`, message bus). Pure domain services take real instances. For time, inject `FakeTimeProvider` (not a mock).
 - No mocking of types you own that have no side effects — construct them.
 - One logical assertion per test (Shouldly chains on one subject are fine).
 
-```csharp
-var clock = Substitute.For<IClock>();
-clock.UtcNow.Returns(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+Use **`FakeTimeProvider`** (`Microsoft.Extensions.TimeProvider.Testing`) for time — not a mocked
+`IClock`. It advances deterministically and is what production `TimeProvider` (see `csharp`) expects.
 
-var result = Subscription.Renew(clock);
+```csharp
+var time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+time.Advance(TimeSpan.FromDays(31));
+
+var result = Subscription.Renew(time);
 
 result.IsSuccess.ShouldBeTrue();
 ```
@@ -238,7 +241,7 @@ Minimum rules: Domain depends on nothing outward; Application never references I
 - `Thread.Sleep` for async timing — await the real signal / use polling with a bounded timeout.
 - Shared mutable state between tests; order-dependent tests. Each test is isolated (Respawn handles DB).
 - Asserting on `result.Value` without first asserting `IsSuccess` (NRE hides the real failure).
-- Non-deterministic data: unseeded `Bogus`, `DateTime.Now`, `Guid.NewGuid()` in assertions — inject `IClock`, seed fakers.
+- Non-deterministic data: unseeded `Bogus`, `DateTime.Now`, `Guid.NewGuid()` in assertions — inject `TimeProvider` (`FakeTimeProvider` in tests), seed fakers.
 - Logic in tests (loops/conditionals deciding the assertion) — prefer `[Theory]` data.
 
 ## Related skills

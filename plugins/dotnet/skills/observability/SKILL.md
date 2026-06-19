@@ -110,6 +110,21 @@ Rules:
 - **Tail log sampling** (log *all* lines of an errored request; ~20% of healthy ones): implement with `Microsoft.Extensions.Telemetry` per-request buffering (`AddPerIncomingRequestBuffer` + `PerRequestLogBuffer.Flush()`) and flush on 5xx/exception. **Do NOT** try to drop records in a `BaseProcessor` — see Gotchas.
 - Never log `Authorization`/`Cookie`/tokens or full request/response bodies; bodies off in Production.
 
+### Source-generated logging (`[LoggerMessage]`, .NET 6+)
+
+On hot/structured log paths use **`[LoggerMessage]`** partial methods — the generator emits
+zero-allocation, strongly-typed log calls (no boxing, no template parse per call). Prefer over
+`logger.LogInformation("…", args)` everywhere the message is fixed; analyzer **CA1848** flags the gap.
+
+```csharp
+internal static partial class Log
+{
+    [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "settled {order_id} in {elapsed_ms}")]
+    public static partial void OrderSettled(ILogger logger, string order_id, double elapsed_ms);
+}
+Log.OrderSettled(logger, id, ms); // snake_case names land snake_cased (see Rules)
+```
+
 ## Correlation & context
 
 - **`correlation_id`** is a durable, business-level id distinct from the (sampling-prone) trace id. Take it from inbound `X-Correlation-Id` **only if it parses as a GUID**, else generate a **UUIDv7** (`Guid.CreateVersion7()`, time-ordered). Reflecting a raw inbound header value into the response is a **CRLF / response-header-injection** vector — validate first.

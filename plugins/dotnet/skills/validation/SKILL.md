@@ -65,9 +65,9 @@ RuleFor(x => x.Title).NotEmpty(); // missing MaximumLength
 RuleFor(x => x.Tags).NotNull();   // missing count cap
 ```
 
-## 3b. Validators run in the pipeline (MediatR behavior)
+## 3b. Validators run in the pipeline (mediator pipeline behavior)
 
-Validators MUST execute **before** the handler, automatically — not by a hand-written `Validate()` call the developer can forget. Register a MediatR `IPipelineBehavior` that runs every `IValidator<TRequest>` and short-circuits on failure.
+Validators MUST execute **before** the handler, automatically — not by a hand-written `Validate()` call the developer can forget. Register a mediator `IPipelineBehavior` that runs every `IValidator<TRequest>` and short-circuits on failure. Works with whichever mediator the project uses — which one to pick (MediatR is commercial from v13; default is the free source-gen `Mediator`) is decided in `../index/references/mediator.md`.
 
 ```csharp
 public sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidator<TRequest>> validators)
@@ -107,6 +107,12 @@ services.ConfigureHttpJsonOptions(o =>
 ```
 
 Rationale: `Disallow` unmapped members causes unknown fields to return 400 — typos and probing attacks fail loudly. `MaxDepth = 32` blocks pathological nesting. Strict number handling rejects quoted/`NaN`/`Infinity` numbers.
+
+For trimming / Native AOT (and to drop startup reflection), add a source-generated `JsonSerializerContext` to the resolver chain — keep these hardened options, just feed it the generated metadata (see `csharp` → JSON serialization):
+
+```csharp
+o.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
+```
 
 ## 5. Kestrel & FormOptions limits
 

@@ -49,6 +49,56 @@ If the existing project uses a different architecture, **follow that architectur
 
 The concrete slice skeleton (Endpoint/Request/Validator/Handler/Response) and FluentValidation conventions live in `web-api` — this skill only fixes *where* slices sit in the module layout.
 
+## Strongly-typed IDs
+
+An entity id is never a raw `Guid`/`int` (prevents `customerId == orderId` mixing at compile time).
+Two acceptable forms:
+
+- A `ValueObject<T>` id (see `csharp`) when you want the id to share the VO base and factory rules.
+- **Vogen** (`[ValueObject<Guid>]` source generator) when you want the boilerplate (equality,
+  validation, EF + JSON converters) generated. Seed ids with `Guid.CreateVersion7()` (see `csharp`).
+
+```csharp
+[ValueObject<Guid>]
+public readonly partial struct OrderId
+{
+    private static Validation Validate(Guid v) => v != Guid.Empty ? Validation.Ok : Validation.Invalid("empty id");
+}
+```
+
+## Persisting domain types (EF Core)
+
+Value objects and strongly-typed ids map to the DB without leaking persistence into the domain:
+
+- **Complex types** (`ComplexProperty`, EF/.NET 8) for multi-field VOs that share the owner's table.
+- **Value converters** (`HasConversion`, EF 5+) for single-value VOs / ids — Vogen ships one.
+
+Full idioms + query-perf rules: `../index/references/ef-core-data-access.md`.
+
+## Domain-event dispatch (concrete)
+
+Aggregates raise events into an internal list; **a `SaveChangesInterceptor` dispatches them in the same
+transaction** — not a hand-called publish the developer can forget. For cross-process delivery, the
+interceptor writes **outbox rows** (never dual-write to a broker; see `hardening` → Background Jobs),
+relayed by a `BackgroundService` (see `csharp` → Channels / hosted services).
+
+```csharp
+public sealed class DomainEventInterceptor(IPublisher publisher) : SaveChangesInterceptor
+{
+    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData e, InterceptionResult<int> r, CancellationToken ct = default)
+    {
+        var events = e.Context!.ChangeTracker.Entries<AggregateRoot>()
+            .SelectMany(x => x.Entity.DrainDomainEvents()).ToArray();
+        foreach (var ev in events) await publisher.Publish(ev, ct); // or enqueue to outbox
+        return await base.SavingChangesAsync(e, r, ct);
+    }
+}
+```
+
+> Bulk `ExecuteUpdate`/`ExecuteDelete` bypasses the change tracker, so it does **not** raise domain
+> events — use it only for maintenance paths, never to mutate event-raising aggregates.
+
 ## Related skills
 
 - `csharp` — record/VO/DU/monad language patterns used by domain models.

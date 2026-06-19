@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, polymorphic state machines (state-as-types over boolean flags), value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, `Span<T>`/`IEnumerable<T>` performance rules, and Microsoft framework-author conventions (field/visibility naming, library async discipline with `ConfigureAwait(false)`/`ValueTask`/`CancellationToken`, hot-path perf primitives, framework/DI surface, XML docs). MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
+description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, polymorphic state machines (state-as-types over boolean flags), value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, modern C# language features (collection expressions, primary constructors, `required`, `field`), `Span<T>`/`IEnumerable<T>` performance rules, source-generated JSON/AOT, `TimeProvider`, async discipline + concurrency primitives + Channels/background work, keyed DI, and Microsoft framework-author conventions (field/visibility naming, library async discipline with `ConfigureAwait(false)`/`ValueTask`/`CancellationToken`, hot-path perf primitives, framework/DI surface, XML docs). MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
 ---
 
 # C# Language & Style
@@ -149,6 +149,20 @@ foreach (var customer in customers)
 }
 ```
 
+## Modern C# language features (codified)
+
+- **`<Nullable>enable</Nullable>` is mandatory** project-wide; `required` members express
+  construction-time contracts (a missing `required` is a compile error, not a runtime null).
+- **Collection expressions** `[..]` (C# 12) for collection init and spread:
+  `int[] ids = [..left, ..right, 0];` — prefer over `.Concat().ToArray()` for fixed shapes.
+- **Primary constructors** (C# 12): use on services/DI types and `record`s. **Avoid** on mutable
+  stateful `class`es where the captured parameter masks a field (use explicit `_field` there).
+- **List / property patterns** over index-and-length checks; `file`-local types (C# 11) for
+  single-file helpers that must not leak into the namespace.
+- **`field` keyword** (C# 14 / .NET 10) for a property with validation but no hand-declared backing
+  field: `public int Age { get => field; init => field = value >= 0 ? value : throw …; }`.
+- `params ReadOnlySpan<T>` (C# 13) is a hot-path allocation primitive — see Performance below.
+
 ## Performance
 
 - Prefer `Span<T>` / `ReadOnlySpan<T>` over `string` / `ReadOnlyMemory<T>` when possible.
@@ -168,9 +182,26 @@ On per-request / per-record / per-message paths (middleware, log/OTel processors
 - Read a **known key set directly** (e.g. `Activity.GetBaggageItem(key)`) instead of enumerating a collection whose getter allocates an iterator (`Activity.Baggage`).
 - **Cache** reflection results, compiled delegates, and converted strings; use `ReferenceEquals` fast-paths when an unchanged value is cached as the same instance.
 - **Microsoft-style primitives** for these paths: `ArrayPool<T>.Shared.Rent(n)` for transient buffers, returned in `finally`; `stackalloc` for small buffers under a ~256-byte ceiling with a heap fallback (`Span<char> b = len <= 256 ? stackalloc char[len] : new char[len];`); `StringBuilder` when concatenating in a loop (never `+=` a string per iteration); `[MethodImpl(MethodImplOptions.AggressiveInlining)]` only on a proven-hot tiny method, with a one-line comment saying why.
+- **`params ReadOnlySpan<T>`** (C# 13) on hot variadic APIs — zero per-call array allocation vs `params T[]`.
 - **Provider query translators are the canonical LINQ-violation site** — the no-LINQ/no-closures rule above applies hardest there.
 - **`readonly struct` escape hatch**: a value object **proven** (benchmark in hand) to allocate on a hot per-row path may become a `readonly struct` instead of a `record` — still immutable, still factory-constructed, kept out of the domain layer. Default stays `record`.
 - Keep these tricks **out of cold paths** — readability wins everywhere that isn't measured-hot.
+
+## JSON serialization — source generation & AOT (.NET 6+; AOT .NET 8+)
+
+- Declare a **`JsonSerializerContext`** for serialized types so there is no startup reflection and the
+  code is trimming / Native-AOT safe.
+
+```csharp
+[JsonSerializable(typeof(ActivityResponse))]
+[JsonSerializable(typeof(IReadOnlyList<ActivityResponse>))]
+public sealed partial class AppJsonContext : JsonSerializerContext;
+```
+
+- **Wiring is owned by `validation`** (§4 Global `JsonSerializerOptions` hardening) — feed the context
+  to the hardened options' resolver chain there; do **not** configure `ConfigureHttpJsonOptions` here.
+- For a Native-AOT service set `<PublishAot>true</PublishAot>`; prefer Minimal API + `TypedResults` and
+  avoid reflection-based serializers/mappers.
 
 ## Async (library code, Microsoft-style)
 
@@ -183,6 +214,56 @@ Library/framework code runs under callers we don't control — follow the dotnet
 - Thread `CancellationToken` through to every downstream async call; default it as the last public
   parameter (`CancellationToken cancellationToken = default`).
 - No `async void` except event handlers — an unobserved exception there crashes the process.
+
+## Time (`TimeProvider`, .NET 8+)
+
+- **`TimeProvider` is the time abstraction** — inject it; call `timeProvider.GetUtcNow()`,
+  `GetTimestamp()`/`GetElapsedTime()`, `CreateTimer()`. **Do not hand-roll an `IClock`** and never read
+  `DateTime.Now`/`DateTimeOffset.UtcNow`/`Guid.NewGuid()` directly in code under test.
+- Production binds the singleton `TimeProvider.System`; tests inject `FakeTimeProvider`
+  (`Microsoft.Extensions.TimeProvider.Testing`) and call `Advance(...)` (see `testing`).
+
+```csharp
+public sealed class Subscription(TimeProvider time)
+{
+    public bool IsExpired(DateTimeOffset until) => time.GetUtcNow() >= until;
+}
+builder.Services.AddSingleton(TimeProvider.System);
+```
+
+## Concurrency primitives
+
+- **`Parallel.ForEachAsync`** (.NET 6) for throttled async fan-out (`MaxDegreeOfParallelism` +
+  `CancellationToken`) — prefer it over a hand-rolled `SemaphoreSlim` loop.
+- **`SemaphoreSlim`** for async gating, **`Interlocked`** for lock-free counters, **`Lazy<T>`** for
+  thread-safe one-time init. Reach for a `lock` only when none of these fit.
+- **`IAsyncEnumerable<T>` streaming** annotates the token with **`[EnumeratorCancellation]`** and yields
+  bounded batches rather than materializing the whole set:
+
+```csharp
+public async IAsyncEnumerable<IReadOnlyList<Row>> StreamAsync(
+    [EnumeratorCancellation] CancellationToken ct = default) { /* yield batches of N */ }
+```
+
+## Background work & channels (.NET 8+)
+
+- In-process producer/consumer → **`System.Threading.Channels`** (`Channel.CreateBounded<T>` for
+  backpressure), drained by a `BackgroundService`. No external broker for purely internal hand-offs —
+  for **distributed/broker reliability** (retry, DLQ, outbox) see `hardening` → Background Jobs & Messaging.
+- Use **`IHostedLifecycleService`** (.NET 8) when you need ordered `Starting/Started/Stopping/Stopped`
+  hooks rather than ad-hoc startup code.
+
+```csharp
+public sealed class WorkQueue : BackgroundService
+{
+    private readonly Channel<WorkItem> _channel = Channel.CreateBounded<WorkItem>(1000);
+    public ValueTask EnqueueAsync(WorkItem item, CancellationToken ct) => _channel.Writer.WriteAsync(item, ct);
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        await foreach (var item in _channel.Reader.ReadAllAsync(ct)) await ProcessAsync(item, ct);
+    }
+}
+```
 
 ## Constants & cross-cutting names
 
@@ -204,6 +285,15 @@ services.AddOptions<JwtOptions>()
 ```
 
 Options classes are sealed, immutable where possible, and annotated (`[Required]`, `[Range]`). Read raw `IConfiguration` only at composition time.
+
+For AOT/trimming and zero-reflection validation, source-generate the validator with **`[OptionsValidator]`** (.NET 8+) instead of `ValidateDataAnnotations()`:
+
+```csharp
+[OptionsValidator]
+public sealed partial class JwtOptionsValidator : IValidateOptions<JwtOptions>;
+services.AddOptions<JwtOptions>().BindConfiguration(JwtOptions.SectionName).ValidateOnStart();
+services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
+```
 
 ## Cross-cutting via extension members
 
@@ -236,6 +326,18 @@ public sealed record TimescaleDbTranslatorDependencies
 }
 ```
 
+## Dependency injection — keyed services (.NET 8+)
+
+When one interface has several interchangeable implementations (strategy / variant / named backend),
+register them **keyed** instead of a custom factory or marker types:
+
+```csharp
+services.AddKeyedSingleton<ICacheStore, RedisCacheStore>("redis");
+services.AddKeyedSingleton<ICacheStore, MemoryCacheStore>("memory");
+
+public sealed class Handler([FromKeyedServices("redis")] ICacheStore cache);
+```
+
 ## Visibility
 
 - `sealed` by default; open a type for inheritance only deliberately.
@@ -256,7 +358,7 @@ public sealed record TimescaleDbTranslatorDependencies
 
 - `ddd` — where domain logic/aggregates/modules live.
 - `web-api` — endpoint/handler/slice shape.
-- `validation` — length-typed VOs, request limits.
-- `hardening` — security/ops for exposed services.
+- `validation` — length-typed VOs, request limits, the `JsonSerializerOptions` wiring for the source-gen context above.
+- `hardening` — security/ops for exposed services; distributed background-job/outbox reliability.
 - `observability` — where the cross-cutting constants, alloc-minimal processors, and `Guid.CreateVersion7` ids are exercised.
-- `testing` — how the tests for this code are written (xUnit/Shouldly/NSubstitute/Testcontainers).
+- `testing` — how the tests for this code are written (xUnit/Shouldly/NSubstitute/Testcontainers); `FakeTimeProvider` for the `TimeProvider` above.

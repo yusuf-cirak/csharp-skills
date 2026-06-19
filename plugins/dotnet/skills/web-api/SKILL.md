@@ -27,6 +27,11 @@ public static class CreateActivityCommand
 - Handlers return a monad (`Result<T>`) — see `../index/references/monads.md`.
 - Every handler signature accepts and propagates `CancellationToken` (full timeout/cancellation rules in `hardening`).
 
+**Mediator selection (do this BEFORE scaffolding):** MediatR is commercial from v13. Default to the
+free source-gen **`martinothamar/Mediator`**; the `IRequest<T>`/`IRequestHandler<,>`/`IPipelineBehavior<,>`
+shapes above are identical either way. If no mediator package is present, **ask the user which to
+install**. Full decision rule + AutoMapper→Mapperly mapping guidance: `../index/references/mediator.md`.
+
 ## FluentValidation
 
 - Prefer functional / static validators.
