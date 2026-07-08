@@ -22,7 +22,7 @@ The user's permanent C# rules, split into seven focused sub-skills so concerns s
 | Modeling a domain; aggregates/entities/domain events; strongly-typed ids (Vogen); EF value-object persistence; domain-event dispatch via `SaveChangesInterceptor`; module & layer layout (Modular Monolith); where a vertical slice lives | **`dotnet:ddd`** |
 | Writing endpoints/handlers/controllers; mediator commands/queries (which mediator to pick — MediatR licensing); slice skeleton; FluentValidation basics; pagination shape | **`dotnet:web-api`** |
 | Request DTOs/commands/queries; input size/length/depth limits; `InputLimits`; length-typed `Text` VOs; JSON/Kestrel/FormOptions hardening; mandatory validator rules; output encoding | **`dotnet:validation`** |
-| Hardening an exposed/multi-tenant service; rate limiting; idempotency; authn/authz (JWT bearer hardening, scopes); forwarded headers; security headers; crypto; ProblemDetails/error handling; HTTP-logging redaction; EF hardening; **resilience pipelines (Polly v8 outbound calls)**; file upload; SSRF; deserialization; CI security | **`dotnet:hardening`** |
+| Hardening an exposed/multi-tenant service; rate limiting; idempotency; authn/authz (JWT bearer hardening, scopes); forwarded headers; security headers; crypto; ProblemDetails/error handling; HTTP-logging redaction; EF hardening; **resilience pipelines (Polly v8 outbound calls)**; **application caching (hybrid L1/L2)**; file upload; SSRF; deserialization; CI security | **`dotnet:hardening`** |
 | Instrumenting a service; OpenTelemetry traces/metrics/logs; `ActivitySource`/`Meter`; correlation_id/baggage; structured logging processors + source-gen `[LoggerMessage]`; sampling; health checks/probes; SLO & burn-rate alerting; telemetry wiring in `Program.cs` | **`dotnet:observability`** |
 | Writing tests; `[Fact]`/`[Theory]`; fixtures/test doubles; integration tests; setting up a test project (xUnit + Shouldly + NSubstitute + Testcontainers + Bogus + NetArchTest) | **`dotnet:testing`** |
 
@@ -53,3 +53,4 @@ These live under `references/` next to this router; sub-skills link to them by r
 - `references/mediator.md` — which mediator to use (MediatR commercial from v13 → default `martinothamar/Mediator`, ask if none), AutoMapper→Mapperly, Wolverine.
 - `references/resilience.md` — Polly v8 / `AddStandardResilienceHandler` pipelines, strategy ordering, chaos testing.
 - `references/ef-core-data-access.md` — EF Core performance (pooling, bulk, compiled/split queries) + value-object/strongly-typed-id persistence.
+- `references/caching.md` — hybrid L1/L2 application cache (FusionCache): stampede protection, fail-safe, backplane invalidation.

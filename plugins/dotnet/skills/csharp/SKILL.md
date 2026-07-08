@@ -312,8 +312,28 @@ When authoring a library, NuGet package, or EF Core provider/extension:
   instead of ten. Consistent with records-everywhere.
 - Offer **generic + non-generic overloads** where a caller may hold only a `Type`
   (`Set<TEntity>()` and `Set(Type entityType)`).
-- Argument guard clauses for programmer error stay exceptions at the public boundary
-  (`ArgumentNullException.ThrowIfNull(x)`) — a contract check, not `Result<T>` error handling.
+- Argument/precondition guards for **programmer error** stay exceptions at the public boundary — a
+  contract check, not `Result<T>` business validation. Standardize on **Ardalis.GuardClauses** (the
+  de-facto static-`Guard` library) as the vocabulary: `Guard.Against.Null(input)`,
+  `Guard.Against.NullOrWhiteSpace(name)`, `Guard.Against.NegativeOrZero(qty)`,
+  `Guard.Against.OutOfRange(page, nameof(page), 1, InputLimits.MaxPageSize)`. Add project-specific
+  checks as **`IGuardClause` extension methods** so every call site stays `Guard.Against.X(...)` (one
+  consistent, IntelliSense-discoverable vocabulary). Reserve guards for impossible/contract violations
+  — expected, user-facing validation failures flow through `Result<T>` / FluentValidation (see
+  `validation`, `ddd` factory rules), never a thrown guard.
+
+```csharp
+Guard.Against.NullOrWhiteSpace(name);
+Guard.Against.OutOfRange(page, nameof(page), 1, InputLimits.MaxPageSize);
+
+// project-specific guard as an extension — call site stays Guard.Against.*
+public static class GuardExtensions
+{
+    public static string InvalidEmail(this IGuardClause guard, string input,
+        [CallerArgumentExpression(nameof(input))] string? name = null)
+        => EmailRegex.IsMatch(input) ? input : throw new ArgumentException("invalid email", name);
+}
+```
 - Mark framework-internal public API that is exempt from semver with an internal-API marker attribute
   (the `[EntityFrameworkInternal]` analog); prefer real `internal` + `[InternalsVisibleTo]` when the
   surface need not be public at all.

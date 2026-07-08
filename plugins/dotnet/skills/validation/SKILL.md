@@ -101,6 +101,8 @@ services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.ReadCommentHandling = JsonCommentHandling.Disallow;
     o.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
     o.SerializerOptions.DefaultBufferSize = 16 * 1024;
+    // Enums as strings with an explicit naming policy — never leak/accept bare integer enum values.
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseUpper));
     foreach (var converter in ValueObjectJsonConverters.JsonConverters)
         o.SerializerOptions.Converters.Add(converter);
 });

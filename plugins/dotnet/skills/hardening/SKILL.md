@@ -1,6 +1,6 @@
 ---
 name: hardening
-description: User's personal FAANG-level production hardening rules for .NET/ASP.NET Core services exposed to untrusted or multi-tenant traffic. Covers tiered/distributed rate limiting & burst protection, idempotency keys & webhook HMAC, authn/authz (short-lived tokens, refresh rotation + reuse detection, global fallback authorize, resource-level checks, tenant-from-claim), security headers & CORS, cryptography (Argon2id/bcrypt, FixedTimeEquals, managed secrets), ProblemDetails error handling, structured logging & audit, EF Core hardening, secure file upload, SSRF defense, XML/deserialization safety, HTTP caching, multi-tenancy isolation, background jobs/outbox, dependency & supply-chain security, OpenTelemetry observability, API versioning/lifecycle, cancellation/timeouts, and CI/test security. Use when hardening a service, doing a security review, configuring middleware/Program.cs, or deploying. Use ALONGSIDE `csharp`, `web-api`, `validation`. DTO-level input size/length limits belong to `validation`.
+description: User's personal FAANG-level production hardening rules for .NET/ASP.NET Core services exposed to untrusted or multi-tenant traffic. Covers tiered/distributed rate limiting & burst protection, idempotency keys & webhook HMAC, authn/authz (short-lived tokens, refresh rotation + reuse detection, global fallback authorize, resource-level checks, tenant-from-claim), security headers & CORS, cryptography (Argon2id/bcrypt, FixedTimeEquals, managed secrets), ProblemDetails error handling, structured logging & audit, EF Core hardening, secure file upload, SSRF defense, XML/deserialization safety, HTTP caching, application caching (hybrid L1/L2), multi-tenancy isolation, background jobs/outbox, dependency & supply-chain security, OpenTelemetry observability, API versioning/lifecycle, cancellation/timeouts, and CI/test security. Use when hardening a service, doing a security review, configuring middleware/Program.cs, or deploying. Use ALONGSIDE `csharp`, `web-api`, `validation`. DTO-level input size/length limits belong to `validation`.
 ---
 
 # Production Hardening (FAANG-level)
@@ -16,10 +16,12 @@ Dimensions:
 - **Burst guard** — sliding window per `(userId, endpoint)`. Default: **20 req / 5s** with `QueueLimit = 0`. A burst beyond the window is rejected immediately, and an offending principal MUST be soft-banned on that endpoint for **60s** (write the lock key into the same store the limiter uses).
 - **Steady quota** — fixed window per user per hour. Reads: 1 000/h, writes: 200/h. Tune per business need.
 - **Concurrency cap** — max in-flight requests per user (default 10). Prevents a single principal monopolising worker threads / DB connections.
-- **Tier multiplier** — anonymous gets 0.25×; authenticated 1×; internal/service 5×.
+- **Tier multiplier** — anonymous gets 0.25×; authenticated 1×; internal/service 5×. The privileged (internal/service) tier MUST be asserted from a **trusted authentication scheme** (mTLS / internal API-key scheme), never from a value the caller can place in its own JWT — a forgeable tier claim is both a rate-limit bypass and a privilege escalation.
 - **Failed-auth lockout** — 5 failures / 10 min on login or token endpoints → 30 min lock on `(username, ip)`. Mitigates credential stuffing.
 
 Partition key precedence: authenticated user id → API key id → `hash(client IP + UA)`. Raw IP alone is too coarse (NAT/CGNAT).
+
+**Partition on the matched route *template*, never the raw path.** Keying on `Request.Path` means `/items/1`, `/items/2`, … each get their own bucket and the effective limit multiplies — a trivial bypass. Read the matched `RouteEndpoint.RoutePattern.RawText` (fall back to the raw path only when no endpoint matched).
 
 Code (.NET 8+ built-in `RateLimiter`):
 
@@ -41,7 +43,10 @@ builder.Services.AddRateLimiter(o =>
         var userKey = httpContext.User.FindFirst("sub")?.Value
                       ?? httpContext.Connection.RemoteIpAddress?.ToString()
                       ?? "anon";
-        var partition = $"{userKey}|{httpContext.Request.Path}";
+        // Route TEMPLATE, not raw path — per-id paths must share one bucket.
+        var route = (httpContext.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText
+                    ?? httpContext.Request.Path.ToString();
+        var partition = $"{userKey}|{route}";
         return RateLimitPartition.GetSlidingWindowLimiter(
             partition,
             _ => new SlidingWindowRateLimiterOptions
@@ -89,6 +94,7 @@ Soft-ban after burst hit: implement a small middleware or `OnRejected` extension
 
 - **In-memory** (`AddRateLimiter` default) — dev / single-instance only. Each process has its own counter; behind a load balancer the limit is multiplied by N.
 - **Distributed (Redis)** — required for any multi-instance prod deployment. Use a community package such as `RedisRateLimiting`, or wrap `StackExchange.Redis` with a Lua script (`INCR` + `EXPIRE`) for atomicity.
+- **Fail open, not closed.** When Redis is unreachable (`AbortOnConnectFail = false`; guard on `IConnectionMultiplexer.IsConnected`), degrade to a per-node in-memory limiter rather than 429-ing every request — a rate-limiter outage must not become a self-inflicted DoS. Emit a `ratelimit.fallback` counter so the degraded (per-node, multiplied-by-N) state is observable and alertable.
 
 ```csharp
 // Distributed example (RedisRateLimiting package)
@@ -193,7 +199,7 @@ app.Use(async (ctx, next) =>
 });
 ```
 
-CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowCredentials()` is **forbidden** (browsers reject it, and it is a clear sign of misconfiguration).
+CORS: explicit `WithOrigins(...)` list. `AllowAnyOrigin()` combined with `AllowCredentials()` is **forbidden** (browsers reject it, and it is a clear sign of misconfiguration). **Deny by default**: when no origins are configured the policy allows **nothing** — never widen to `AllowAnyOrigin` as an empty-config fallback.
 
 ## Forwarded Headers / Real Client IP
 
@@ -288,6 +294,12 @@ chaos-testing (`AddChaosFault`/Simmy): `../index/references/resilience.md`.
 - `Vary: Authorization` on any response that varies per user.
 - Use `ETag` for conditional GET on read-heavy public endpoints.
 
+## Application Caching (hybrid L1/L2)
+
+Don't hand-roll a cache layer or run a bare `IDistributedCache`. Default to a **hybrid L1 (in-process) +
+L2 (Redis)** cache with stampede protection, fail-safe stale-serving, and cross-node invalidation. Full
+rules + library pick (FusionCache): `../index/references/caching.md`.
+
 ## Multi-Tenancy
 
 - Tenant id flow: token claim → `ICurrentTenant` → EF global query filter → repository / handler.
@@ -296,7 +308,7 @@ chaos-testing (`AddChaosFault`/Simmy): `../index/references/resilience.md`.
 
 ## Background Jobs & Messaging
 
-- Handlers MUST be idempotent (dedupe via message id table or natural key).
+- Handlers MUST be idempotent. Concrete dedup: persist a `(message_id, consumer)` **unique** row in the *same transaction* as the handler's state change, and treat a unique-violation on insert (`SQLSTATE 23505` — provider-agnostic, read `DbException.SqlState`) as an idempotent no-op (a concurrent/redelivered duplicate), **not** an error to retry into a poison loop.
 - Retry: exponential backoff with jitter, bounded attempts (default 5). Poison messages → DLQ; alert on DLQ depth.
 - Cross-aggregate writes use the **Outbox pattern** — never dual-write to DB + broker.
 - This section owns **distributed/broker** reliability. For a purely **in-process** producer/consumer queue (no broker), use the `System.Threading.Channels` + `BackgroundService` primitive in `csharp` → Background work & channels.

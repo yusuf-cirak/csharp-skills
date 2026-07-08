@@ -40,7 +40,7 @@ builder.Logging.AddOpenTelemetry(o => { /* see Logs */ });
 - One `ActivitySource` **per module** (name = module). Instrument the framework: `AddAspNetCoreInstrumentation`, `AddHttpClientInstrumentation`, plus `AddSource(...)` for EF/`Npgsql`, `MassTransit`, and your own sources.
 - **Sampling:** `SetSampler(new ParentBasedSampler(new TraceIdRatioBasedSampler(ratio)))`. Full traces in Development (`ratio = 1.0`), a configurable fraction in prod (default `0.2`). `ParentBased` honours the upstream's sampled decision so a distributed trace is kept or dropped coherently end-to-end; only root spans roll the ratio.
 - **Tags are low-cardinality only** — `http.route`, `user.id` (opaque), `tenant.id`. Never free-form strings / full URLs / payloads as tag values.
-- **Propagation:** W3C `traceparent` inbound + outbound (HttpClient auto-propagates). Across messaging, propagate the trace through broker headers and **re-parent** the consume span across the outbox boundary (a dedicated `ActivitySource` started from the restored context).
+- **Propagation:** W3C `traceparent` inbound + outbound (HttpClient auto-propagates). Across messaging, propagate the trace through broker headers and **re-parent** the consume span across the outbox boundary (a dedicated `ActivitySource` started from the restored context). MassTransit only re-parents from **its own envelope** — for **raw-JSON / externally-produced / CDC** messages it does not, so carry `traceparent` (+ `tracestate`) as explicit message headers and re-parent in a consume **pipeline filter**, restoring `correlation_id`/`causation_id` into baggage there too.
 - `activity?.AddException(ex)` (or `RecordException`) on the span when handling an error; don't swallow it silently.
 
 ```csharp
