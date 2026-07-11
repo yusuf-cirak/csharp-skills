@@ -153,6 +153,31 @@ public abstract class IntegrationTestBase(PostgresFixture fixture) : IAsyncLifet
 - Assert real HTTP behavior the hardening rules promise: `ProblemDetails` shape, security headers, `429` envelope (see `hardening`).
 - Every test that touches I/O passes a `CancellationToken`.
 
+**One shared spine per assembly** — start Postgres+Redis+Kafka **once** for the whole test assembly, not per class. Starting a container set per class is wasteful and slow.
+
+```csharp
+[CollectionDefinition(Name)]
+public sealed class IntegrationCollection : ICollectionFixture<SpineFixture> { public const string Name = "integration"; }
+// Every integration test class carries [Collection(IntegrationCollection.Name)] → shares the one container set.
+// Collection tests run SEQUENTIALLY, so a rate-limit-sensitive test can flush Redis first and stay isolated:
+public async Task ResetRedisAsync() {
+    await using var mux = await ConnectionMultiplexer.ConnectAsync($"{RedisConnectionString},allowAdmin=true");
+    foreach (var ep in mux.GetEndPoints()) await mux.GetServer(ep).FlushDatabaseAsync();
+}
+```
+
+**Optimistic concurrency needs a real database.** InMemory has no unique constraints and no `xmin`, so it *cannot* test this — a concrete case of the "no EF in-memory" anti-pattern below. Two scopes, two contexts, one row:
+
+```csharp
+var a = scopeA.ServiceProvider.GetRequiredService<AppDbContext>();
+var b = scopeB.ServiceProvider.GetRequiredService<AppDbContext>();
+var ra = await a.Set<Order>().SingleAsync(x => x.Id == id);
+var rb = await b.Set<Order>().SingleAsync(x => x.Id == id);
+ra.Rename("A"); await a.SaveChangesAsync();   // first writer wins — Postgres advances xmin
+rb.Rename("B");
+await Should.ThrowAsync<DbUpdateConcurrencyException>(() => b.SaveChangesAsync()); // stale xmin → rejected
+```
+
 ## Testing middleware & Activity/baggage
 
 Middleware that reads/sets `Activity.Current` (correlation id, baggage enrichment) is tested with a `DefaultHttpContext` + a live `ActivityListener` — no host needed.

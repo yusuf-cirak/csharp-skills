@@ -95,6 +95,7 @@ Monadic error handling (`Result<T>`/`Option<T>`) over exceptions, monadic option
 - Reach for `foreach` only when the body has side effects (I/O, mutation of external state, logging, `await` per item without `await foreach`), or when LINQ would force materialization that hurts performance.
 - Keep LINQ pipelines pure; do not mutate captured state inside `Select`/`Where`.
 - Combine with `IEnumerable<T>` / `IAsyncEnumerable<T>` from the Performance rules — do not materialize with `ToList()` unless a caller needs random access or multiple enumerations.
+- **ZLinq by default.** Reference ZLinq (Cysharp) in every project and chain `.AsValueEnumerable()` before the operators — a struct-based, zero-allocation drop-in for LINQ (no enumerator/delegate heap allocations, same operator surface). It removes the usual "LINQ allocates, so drop to a loop on hot paths" trade-off, so LINQ stays the default even in hot code.
 
 Example — aggregating order totals per customer with line items from a separate source:
 
@@ -178,10 +179,11 @@ foreach (var customer in customers)
 On per-request / per-record / per-message paths (middleware, log/OTel processors, serializers), allocation is the cost — be deliberate:
 
 - Allocate **nothing** when there's nothing to do (early-return before building a list); build **one pre-sized** collection when you must.
-- Prefer **struct enumerators** and indexer loops over LINQ; LINQ materialization and iterator objects are real allocations here.
+- Reach for **ZLinq `.AsValueEnumerable()`** to keep LINQ allocation-free here (see the LINQ rules); drop to an indexer loop only for the last measured-hot bit. Plain `System.Linq` iterator + delegate objects ARE real allocations on these paths.
 - Read a **known key set directly** (e.g. `Activity.GetBaggageItem(key)`) instead of enumerating a collection whose getter allocates an iterator (`Activity.Baggage`).
 - **Cache** reflection results, compiled delegates, and converted strings; use `ReferenceEquals` fast-paths when an unchanged value is cached as the same instance.
 - **Microsoft-style primitives** for these paths: `ArrayPool<T>.Shared.Rent(n)` for transient buffers, returned in `finally`; `stackalloc` for small buffers under a ~256-byte ceiling with a heap fallback (`Span<char> b = len <= 256 ? stackalloc char[len] : new char[len];`); `StringBuilder` when concatenating in a loop (never `+=` a string per iteration); `[MethodImpl(MethodImplOptions.AggressiveInlining)]` only on a proven-hot tiny method, with a one-line comment saying why.
+- **Pooled collections** when a collection is built and discarded every request/iteration: `Collections.Pooled` (`PooledList<T>`/`PooledDictionary<K,V>`) rents its backing array from `ArrayPool<T>` and returns it on `Dispose()` — always `using`. Reserve for measured hot spots; plain `List<T>` everywhere else.
 - **`params ReadOnlySpan<T>`** (C# 13) on hot variadic APIs — zero per-call array allocation vs `params T[]`.
 - **Provider query translators are the canonical LINQ-violation site** — the no-LINQ/no-closures rule above applies hardest there.
 - **`readonly struct` escape hatch**: a value object **proven** (benchmark in hand) to allocate on a hot per-row path may become a `readonly struct` instead of a `record` — still immutable, still factory-constructed, kept out of the domain layer. Default stays `record`.

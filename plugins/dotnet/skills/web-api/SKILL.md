@@ -41,6 +41,41 @@ install**. Full decision rule + AutoMapper→Mapperly mapping guidance: `../inde
 
 Every list/query endpoint paginates — no filterless `GetAll`. Inherit the shared `PagedRequest` base; the base, its validator, and the `MaxPageSize` cap live in `validation`.
 
+Request clamps + result envelope + the EF projection extension (this is the read side; `PagedRequest`'s validator still enforces limits at the boundary):
+
+```csharp
+public sealed record PageRequest(int Page = 1, int PageSize = 20) {
+    public const int MaxPageSize = 200;
+    public int NormalizedPage => Page < 1 ? 1 : Page;
+    public int NormalizedPageSize => PageSize is < 1 ? 20 : PageSize > MaxPageSize ? MaxPageSize : PageSize;
+    public int Skip => (NormalizedPage - 1) * NormalizedPageSize;
+}
+public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, long TotalCount) {
+    public int TotalPages => PageSize <= 0 ? 0 : (int)Math.Ceiling(TotalCount / (double)PageSize);
+    public bool HasNext => Page < TotalPages;
+    public bool HasPrevious => Page > 1;
+}
+public static async Task<PagedResult<T>> ToPagedResultAsync<T>(
+        this IQueryable<T> query, PageRequest page, CancellationToken ct = default) {
+    var total = await query.LongCountAsync(ct);
+    var items = await query.Skip(page.Skip).Take(page.NormalizedPageSize).ToListAsync(ct); // order the query first!
+    return new(items, page.NormalizedPage, page.NormalizedPageSize, total);
+}
+```
+
+- Clamp size to `MaxPageSize` — a hostile/empty query must not be able to ask for an unbounded set.
+- ALWAYS order before paging; `Skip`/`Take` over an unordered query is non-deterministic.
+
+## Strongly-typed id binding
+
+Minimal API binds a route/query parameter to a strongly-typed id for free when the id implements `IParsable<T>` — no custom `TryParseParameter`/binder needed.
+
+```csharp
+// OrderId implements IParsable<OrderId> (Vogen generates it; a hand-rolled id implements it explicitly,
+// reached via the IParsable<T> constraint). "/orders/{guid}" binds through OrderId.TryParse.
+app.MapGet("/orders/{id}", (OrderId id) => ...);
+```
+
 ## Related skills
 
 - `csharp` — base idioms (records, monads, LINQ).

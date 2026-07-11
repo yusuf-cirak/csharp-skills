@@ -14,7 +14,7 @@ Owns **where domain logic lives** and how the solution is structured. Record/val
 - Use **Domain Events** for cross-cutting concerns.
 - Domain models: **private constructor + static factory methods**. Never construct directly when a factory exists.
 - Validation goes in the factory method. Return a monad type (`Result<T>` / `Option<T>` — from YC.Monad if available, otherwise the codebase's existing equivalent) when validation can fail. See `../index/references/monads.md`.
-- Use **value objects** for complex primitives. Base type: `../index/references/value-object-base.md`.
+- Use **value objects** for complex primitives. Hand-rolled base: `../index/references/value-object-base.md`; source-generated (Vogen `[ValueObject<string>]`, `NormalizeInput`/`Validate`/`[GeneratedRegex]`): `../index/references/strongly-typed-ids-and-value-objects.md`.
 - Use **discriminated unions** for types with multiple variants.
 - Model aggregate/entity **state machines as types**, not boolean flags or a status enum: sealed
   per-state subtypes that expose only their legal operations, a DU for the state payload, capability
@@ -52,19 +52,10 @@ The concrete slice skeleton (Endpoint/Request/Validator/Handler/Response) and Fl
 ## Strongly-typed IDs
 
 An entity id is never a raw `Guid`/`int` (prevents `customerId == orderId` mixing at compile time).
-Two acceptable forms:
-
-- A `ValueObject<T>` id (see `csharp`) when you want the id to share the VO base and factory rules.
-- **Vogen** (`[ValueObject<Guid>]` source generator) when you want the boilerplate (equality,
-  validation, EF + JSON converters) generated. Seed ids with `Guid.CreateVersion7()` (see `csharp`).
-
-```csharp
-[ValueObject<Guid>]
-public readonly partial struct OrderId
-{
-    private static Validation Validate(Guid v) => v != Guid.Empty ? Validation.Ok : Validation.Invalid("empty id");
-}
-```
+Two acceptable forms: a `ValueObject<T>` id (see `value-object-base.md`) when it should share the VO
+base + factory rules, or a **Vogen** `[ValueObject<Guid>]` when you want equality/validation/converters
+generated. Full Vogen depth (int reference-data ids, converter registration, `IParsable`, packaging,
+`TryFrom` vs `Result`): `../index/references/strongly-typed-ids-and-value-objects.md`.
 
 ## Persisting domain types (EF Core)
 
@@ -98,6 +89,11 @@ public sealed class DomainEventInterceptor(IPublisher publisher) : SaveChangesIn
 
 > Bulk `ExecuteUpdate`/`ExecuteDelete` bypasses the change tracker, so it does **not** raise domain
 > events — use it only for maintenance paths, never to mutate event-raising aggregates.
+
+**Pre/Post split.** `IPreDomainEvent : IDomainEvent` is published inside `SavingChangesAsync` (SAME
+transaction, before commit — invariants / derived writes that must persist atomically); `IPostDomainEvent`
+is published in `SavedChangesAsync` (AFTER commit — side-effects: notifications, integration/outbox
+events). One interceptor drains the aggregate's events and splits by marker.
 
 ## Related skills
 
