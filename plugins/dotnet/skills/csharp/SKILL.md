@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, polymorphic state machines (state-as-types over boolean flags), value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops, modern C# language features (collection expressions, primary constructors, `required`, `field`), `Span<T>`/`IEnumerable<T>` performance rules, source-generated JSON/AOT, `TimeProvider`, async discipline + concurrency primitives + Channels/background work, keyed DI, and Microsoft framework-author conventions (field/visibility naming, library async discipline with `ConfigureAwait(false)`/`ValueTask`/`CancellationToken`, hot-path perf primitives, framework/DI surface, XML docs). MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
+description: User's personal C# language & style idioms — the always-on base layer for ANY `.cs` work. Covers file-scoped namespaces and file organization, immutability, strict record design with `<Name>Factory` static classes, discriminated unions, polymorphic state machines (state-as-types over boolean flags), value objects (base type + pattern), YC.Monad `Result<T>`/`Option<T>` error handling, LINQ-over-imperative-loops (ZLinq drop-in generator by default), ZString zero-allocation string building, modern C# language features (collection expressions, primary constructors, `required`, `field`), `Span<T>`/`IEnumerable<T>` performance rules, source-generated JSON/AOT, `TimeProvider`, async discipline + concurrency primitives + Channels/background work, keyed DI, and Microsoft framework-author conventions (field/visibility naming, library async discipline with `ConfigureAwait(false)`/`ValueTask`/`CancellationToken`, hot-path perf primitives, framework/DI surface, XML docs). MUST be used whenever writing, editing, reviewing, or generating ANY C# code (`.cs`/`.csproj`/`.slnx`) or discussing C#/.NET language features — even if unmentioned. This is the foundation; for domain modeling also use `ddd`, for endpoints `web-api`, for request/DTO limits `validation`, for service hardening `hardening`.
 ---
 
 # C# Language & Style
@@ -95,7 +95,34 @@ Monadic error handling (`Result<T>`/`Option<T>`) over exceptions, monadic option
 - Reach for `foreach` only when the body has side effects (I/O, mutation of external state, logging, `await` per item without `await foreach`), or when LINQ would force materialization that hurts performance.
 - Keep LINQ pipelines pure; do not mutate captured state inside `Select`/`Where`.
 - Combine with `IEnumerable<T>` / `IAsyncEnumerable<T>` from the Performance rules — do not materialize with `ToList()` unless a caller needs random access or multiple enumerations.
-- **ZLinq by default.** Reference ZLinq (Cysharp) in every project and chain `.AsValueEnumerable()` before the operators — a struct-based, zero-allocation drop-in for LINQ (no enumerator/delegate heap allocations, same operator surface). It removes the usual "LINQ allocates, so drop to a loop on hot paths" trade-off, so LINQ stays the default even in hot code.
+- **ZLinq by default.** Reference ZLinq (Cysharp) in every project — a struct-based, zero-allocation drop-in for LINQ (no enumerator/delegate heap allocations, same operator surface). It removes the usual "LINQ allocates, so drop to a loop on hot paths" trade-off, so LINQ stays the default even in hot code.
+
+### ZLinq drop-in setup
+
+Install ZLinq as a **drop-in** so call sites keep plain LINQ syntax — no `.AsValueEnumerable()` chaining:
+
+```bash
+dotnet add package ZLinq
+dotnet add package ZLinq.DropInGenerator
+```
+
+The source generator emits extension methods that take overload priority over `System.Linq` for the selected target types, so the ZLinq method is picked whenever name and arguments match. Configure it with one assembly attribute:
+
+```csharp
+// New project — most aggressive: everything (incl. IEnumerable<T>) routes through ZLinq.
+// Generate into the app's default namespace, NOT global (""): with Enumerable included,
+// a global drop-in makes normal System.Linq unreachable; a namespaced one lets a file
+// opt back into System.Linq by not importing that namespace.
+[assembly: ZLinq.ZLinqDropInAttribute("MyApp", ZLinq.DropInGenerateTypes.Everything)]
+
+// Legacy/existing project — use Collection (Array | Span | Memory | List), NOT Everything:
+// the Enumerable drop-in returns ValueEnumerable where existing code expects IEnumerable<T>
+// (a real problem on net9+), so it breaks existing call sites. Without Enumerable,
+// `.AsEnumerable()` stays available as the System.Linq escape hatch.
+[assembly: ZLinq.ZLinqDropInAttribute("MyApp", ZLinq.DropInGenerateTypes.Collection)]
+```
+
+`DropInGenerateTypes` is a flags enum — `Array`, `Span` (Span/ReadOnlySpan), `Memory` (Memory/ReadOnlyMemory), `List`, `Enumerable` (IEnumerable), combinable (`Array | Span`), with predefined combos `Collection = Array | Span | Memory | List` and `Everything = Collection | Enumerable`. Where the drop-in isn't configured (a quick script, someone else's repo), chain `.AsValueEnumerable()` manually before the operators.
 
 Example — aggregating order totals per customer with line items from a separate source:
 
@@ -174,15 +201,37 @@ foreach (var customer in customers)
 - **`FrozenSet<T>` / `FrozenDictionary<K,V>`** for static, read-mostly lookup sets built once at startup (sensitive-key sets, scope tables, allow-lists) — faster reads than `HashSet`/`Dictionary`.
 - **Time-ordered ids**: `Guid.CreateVersion7()` (UUIDv7) for entity/message/correlation ids — index-friendly (monotonic) unlike random v4.
 
+### String operations — ZString
+
+ZString (Cysharp) is the preferred string-building/formatting library: zero-allocation `Concat`/`Format`/`Join` and pooled builders. **If the project already references ZString, use it by default** for any string build/concat/format. **If it doesn't, recommend it and ask before adding the package** (`dotnet add package ZString`); until it's in, fall back to `StringBuilder`/interpolation.
+
+```csharp
+using Cysharp.Text; // ZString
+
+var line = ZString.Format("settled {0} in {1}ms", orderId, elapsedMs); // no boxing, no intermediate strings
+var csv  = ZString.Join(',', ids);
+
+using var sb = ZString.CreateStringBuilder(); // pooled buffer — always `using`
+sb.Append(header);
+sb.AppendFormat("{0:D8}", sequence);
+var payload = sb.ToString();
+
+using var utf8 = ZString.CreateUtf8StringBuilder(); // writes UTF8 directly — pairs with IBufferWriter<byte>
+```
+
+- `ZString.Concat`/`Format`/`Join` over `string.Concat`/`string.Format`/`string.Join`, and over `+`/interpolation on hot paths.
+- `ZString.CreateStringBuilder()` over `new StringBuilder()` for loop concatenation — same rule as the hot-path discipline below, minus the builder allocation.
+- `CreateUtf8StringBuilder()` when the destination is bytes (network, file, `IBufferWriter<byte>`) — skips the UTF16→UTF8 transcode.
+
 ### Hot-path allocation discipline
 
 On per-request / per-record / per-message paths (middleware, log/OTel processors, serializers), allocation is the cost — be deliberate:
 
 - Allocate **nothing** when there's nothing to do (early-return before building a list); build **one pre-sized** collection when you must.
-- Reach for **ZLinq `.AsValueEnumerable()`** to keep LINQ allocation-free here (see the LINQ rules); drop to an indexer loop only for the last measured-hot bit. Plain `System.Linq` iterator + delegate objects ARE real allocations on these paths.
+- Reach for **ZLinq** (drop-in generator — see the LINQ rules; `.AsValueEnumerable()` where the drop-in isn't configured) to keep LINQ allocation-free here; drop to an indexer loop only for the last measured-hot bit. Plain `System.Linq` iterator + delegate objects ARE real allocations on these paths.
 - Read a **known key set directly** (e.g. `Activity.GetBaggageItem(key)`) instead of enumerating a collection whose getter allocates an iterator (`Activity.Baggage`).
 - **Cache** reflection results, compiled delegates, and converted strings; use `ReferenceEquals` fast-paths when an unchanged value is cached as the same instance.
-- **Microsoft-style primitives** for these paths: `ArrayPool<T>.Shared.Rent(n)` for transient buffers, returned in `finally`; `stackalloc` for small buffers under a ~256-byte ceiling with a heap fallback (`Span<char> b = len <= 256 ? stackalloc char[len] : new char[len];`); `StringBuilder` when concatenating in a loop (never `+=` a string per iteration); `[MethodImpl(MethodImplOptions.AggressiveInlining)]` only on a proven-hot tiny method, with a one-line comment saying why.
+- **Microsoft-style primitives** for these paths: `ArrayPool<T>.Shared.Rent(n)` for transient buffers, returned in `finally`; `stackalloc` for small buffers under a ~256-byte ceiling with a heap fallback (`Span<char> b = len <= 256 ? stackalloc char[len] : new char[len];`); `ZString.CreateStringBuilder()` — or `StringBuilder` when ZString isn't referenced (see String operations above) — when concatenating in a loop (never `+=` a string per iteration); `[MethodImpl(MethodImplOptions.AggressiveInlining)]` only on a proven-hot tiny method, with a one-line comment saying why.
 - **Pooled collections** when a collection is built and discarded every request/iteration: `Collections.Pooled` (`PooledList<T>`/`PooledDictionary<K,V>`) rents its backing array from `ArrayPool<T>` and returns it on `Dispose()` — always `using`. Reserve for measured hot spots; plain `List<T>` everywhere else.
 - **`params ReadOnlySpan<T>`** (C# 13) on hot variadic APIs — zero per-call array allocation vs `params T[]`.
 - **Provider query translators are the canonical LINQ-violation site** — the no-LINQ/no-closures rule above applies hardest there.

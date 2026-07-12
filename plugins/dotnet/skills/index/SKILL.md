@@ -18,7 +18,7 @@ The user's permanent C# rules, split into seven focused sub-skills so concerns s
 
 | You are doing… | Invoke |
 |---|---|
-| ANY `.cs` edit; records, value objects, DUs, monads, LINQ, immutability, naming, performance; `TimeProvider`; keyed DI; Channels/`BackgroundService`; modern C# (collection expr, primary ctors, `required`, `field`); source-gen JSON/AOT; concurrency primitives | **`dotnet:csharp`** (always) |
+| ANY `.cs` edit; records, value objects, DUs, monads, LINQ (ZLinq drop-in), ZString string ops, immutability, naming, performance; `TimeProvider`; keyed DI; Channels/`BackgroundService`; modern C# (collection expr, primary ctors, `required`, `field`); source-gen JSON/AOT; concurrency primitives | **`dotnet:csharp`** (always) |
 | Modeling a domain; aggregates/entities/domain events; strongly-typed ids (Vogen); EF value-object persistence; domain-event dispatch via `SaveChangesInterceptor`; module & layer layout (Modular Monolith); where a vertical slice lives | **`dotnet:ddd`** |
 | Writing endpoints/handlers/controllers; mediator commands/queries (which mediator to pick — MediatR licensing); slice skeleton; FluentValidation basics; pagination shape | **`dotnet:web-api`** |
 | Request DTOs/commands/queries; input size/length/depth limits; `InputLimits`; length-typed `Text` VOs; JSON/Kestrel/FormOptions hardening; mandatory validator rules; output encoding | **`dotnet:validation`** |

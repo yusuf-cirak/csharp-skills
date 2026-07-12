@@ -1,6 +1,6 @@
 ---
 name: observability
-description: User's personal FAANG-level OpenTelemetry-native observability standard for .NET/ASP.NET Core. Covers the three pillars over OTLP — traces (ActivitySource per module, ParentBased ratio sampling, W3C propagation incl. across messaging), metrics (System.Diagnostics.Metrics Meter API, RED + USE, custom instruments, low-cardinality tags, exemplars), and logs (ILogger → OpenTelemetry, NO Serilog by default; snake_case templates, BaseProcessor key/mask/baggage enrichment, tail sampling via per-request buffering) — plus correlation_id/baggage context, Kubernetes health probes (liveness/readiness/startup) with drain-on-shutdown, SLOs with multi-window burn-rate alerts, and the hard-won SDK gotchas. Use when instrumenting a service, wiring telemetry in Program.cs, configuring exporters/processors/sampling, adding metrics, or setting up health checks. Vendor-neutral (OTLP + any collector). Use ALONGSIDE `hardening` (which owns security headers, redaction, rate limiting) and `csharp` (constants, allocation-minimal hot paths).
+description: User's personal FAANG-level OpenTelemetry-native observability standard for .NET/ASP.NET Core. Covers the three pillars over OTLP — traces (ActivitySource per module, ParentBased ratio sampling, W3C propagation incl. across messaging), metrics (System.Diagnostics.Metrics Meter API, RED + USE, custom instruments, low-cardinality tags, exemplars), and logs (ILogger → OpenTelemetry, NO Serilog by default; source-generated `[LoggerMessage]` by default, CA1848 enforced; snake_case templates, BaseProcessor key/mask/baggage enrichment, tail sampling via per-request buffering) — plus correlation_id/baggage context, Kubernetes health probes (liveness/readiness/startup) with drain-on-shutdown, SLOs with multi-window burn-rate alerts, and the hard-won SDK gotchas. Use when instrumenting a service, wiring telemetry in Program.cs, configuring exporters/processors/sampling, adding metrics, or setting up health checks. Vendor-neutral (OTLP + any collector). Use ALONGSIDE `hardening` (which owns security headers, redaction, rate limiting) and `csharp` (constants, allocation-minimal hot paths).
 ---
 
 # Observability (OpenTelemetry-native, FAANG-level)
@@ -105,16 +105,22 @@ builder.Logging.AddJsonConsole(o => o.JsonWriterOptions = new() { Indented = fal
 
 Rules:
 
-- **Write snake_case property names in templates** — `logger.LogInformation("settled {order_id} in {elapsed_ms}", id, ms)` — so app attributes land snake_cased without a rewrite pass. (Framework scope keys stay PascalCase; that's fine — see Gotchas.)
+- **Write snake_case property names in templates** — `[LoggerMessage(Message = "settled {order_id} in {elapsed_ms}")]` (source-generated logging is the default, see below; same rule for any inline template) — so app attributes land snake_cased without a rewrite pass. (Framework scope keys stay PascalCase; that's fine — see Gotchas.)
 - **Sensitive masking is key-based** (a `FrozenSet` of sensitive attribute names → value becomes `***`), **never** a regex/string-scan over values. Mask `password`, `token`, `authorization`, `api_key`, card/PAN, `email`, `phone`, etc. (See `hardening` for the HTTP header allow-list + query-param redaction.)
 - **Tail log sampling** (log *all* lines of an errored request; ~20% of healthy ones): implement with `Microsoft.Extensions.Telemetry` per-request buffering (`AddPerIncomingRequestBuffer` + `PerRequestLogBuffer.Flush()`) and flush on 5xx/exception. **Do NOT** try to drop records in a `BaseProcessor` — see Gotchas.
 - Never log `Authorization`/`Cookie`/tokens or full request/response bodies; bodies off in Production.
 
-### Source-generated logging (`[LoggerMessage]`, .NET 6+)
+### Source-generated logging (`[LoggerMessage]`, .NET 6+) — the default
 
-On hot/structured log paths use **`[LoggerMessage]`** partial methods — the generator emits
-zero-allocation, strongly-typed log calls (no boxing, no template parse per call). Prefer over
-`logger.LogInformation("…", args)` everywhere the message is fixed; analyzer **CA1848** flags the gap.
+**`[LoggerMessage]` partial methods are the default for ALL application logging** with a fixed
+message — not just hot paths. The generator emits zero-allocation, strongly-typed log calls (no
+boxing, no template parse per call), and the `Log` class doubles as the catalog of every event the
+service emits. Inline `logger.LogInformation("…", args)` is acceptable only for throwaway dev-time
+logging that won't ship. Enforce with analyzer **CA1848** — escalate it in `.editorconfig`:
+
+```ini
+dotnet_diagnostic.CA1848.severity = warning
+```
 
 ```csharp
 internal static partial class Log
