@@ -89,3 +89,22 @@ SQL Server. Learned rules, most impactful first:
   Vogen-generated IDs (see `ddd`) ship an EF converter — register it via
   `HasConversion<OrderId.EfCoreValueConverter>()`. Pair with the JSON converter list in
   `value-object-base.md` so the same VO round-trips over HTTP and the DB.
+
+## Keyset paging, transactions & bulk backfills
+
+- **Exclusive keyset lower-bound off-by-one.** With `WHERE key > @cursor`, seeding `@cursor = MIN(key)` drops
+  the minimum row. Start strictly below it (`min.AddTicks(-1)` or a sentinel) so the first exclusive window
+  includes the earliest row(s).
+- **Wrap mutually-dependent reads in one transaction.** When a decision compares several values that must
+  reflect the same instant — e.g. two `COUNT`s expected to be equal — reading them as separate queries lets a
+  concurrent write land between them and skew the comparison. Read them inside a single transaction with an
+  isolation level strong enough to prevent that interleaving (Serializable, or Snapshot where the store
+  supports it); the default read-committed level does not guarantee it even within one transaction. This
+  applies to any such batched/consistency-sensitive operation, not one database. (EF Core 3.1 / C# 7.3 note:
+  no `await using` — use sync `using (var tx = await db.BeginTransactionAsync(isolation, ct)) { …; await
+  tx.CommitAsync(ct); }`.)
+- **Bulk-load into a heap, rebuild indexes after.** Before a very large insert, drop the secondary indexes
+  and the clustered key (a random/GUID clustered key causes page splits on every insert), stream the rows in,
+  then rebuild the key + indexes once at the end. Guard each DDL step so it is idempotent (`DROP … IF EXISTS`,
+  create only when missing). Only drop the primary key when the load needs no per-row uniqueness check
+  (disjoint ranges / dup-free resume) — otherwise duplicates surface at the final key rebuild.
