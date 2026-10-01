@@ -1,11 +1,11 @@
 ---
 name: ddd
-description: User's personal Domain-Driven Design & architecture rules for .NET — owns WHERE domain logic lives. Covers DDD tactical patterns (business logic in domain models, domain services, domain events, private-constructor + static-factory aggregates, value objects for primitives, discriminated unions for variants), the Modular Monolith layout (`BuildingBlocks/*`, `Modules/<Name>/{Application,Contracts,Domain,Infrastructure}`, `Presentation/*.Host`), and Vertical-Slice module structure. Use when modeling a domain, adding/changing an aggregate/entity/domain-event, scaffolding a new module or feature, or deciding project/layer layout. Use ALONGSIDE `csharp` (record/VO/monad idioms). NOT for request validation, JSON/serialization config, or endpoint wiring — those are `web-api` / `validation`.
+description: Use when modeling a .NET domain, adding or changing an aggregate/entity/domain-event, scaffolding a new module or feature, or deciding project/layer layout. NOT for request validation, JSON/serialization config, or endpoint wiring — see `web-api` / `validation`.
 ---
 
 # .NET Domain-Driven Design & Architecture
 
-Owns **where domain logic lives** and how the solution is structured. Record/value-object/discriminated-union *language patterns* come from `csharp`; this skill governs domain modeling and module layout. Apply alongside `csharp`.
+Owns **where domain logic lives** and how the solution is structured: DDD tactical patterns (business logic in domain models, domain services, domain events, private-constructor + static-factory aggregates, value objects for primitives, discriminated unions for variants), the Modular Monolith layout (`BuildingBlocks/*`, `Modules/<Name>/{Application,Contracts,Domain,Infrastructure}`, `Presentation/*.Host`), and Vertical-Slice module structure. Record/value-object/discriminated-union *language patterns* come from `csharp`; this skill governs domain modeling and module layout. Apply alongside `csharp`.
 
 ## Domain Driven Design
 
@@ -31,12 +31,12 @@ Default layout:
   - `BuildingBlocks.Host` — middleware, Swagger/Scalar, host defaults.
   - `BuildingBlocks.Infrastructure` — Persistence base, Outbox, shared infra.
 - `Modules/<ModuleName>/`
-  - `GoActivity.<ModuleName>.Application` — Features, Commands, Queries, Handlers.
-  - `GoActivity.<ModuleName>.Contracts` — Public interfaces + DTOs for cross-module use.
-  - `GoActivity.<ModuleName>.Domain` — domain models, aggregates, business rules.
-  - `GoActivity.<ModuleName>.Infrastructure` — module-specific persistence and impl.
-- `Presentation/GoActivity.Host` — ASP.NET Core Web API entrypoint, bootstraps all modules.
-- `GoActivity.slnx` — solution file.
+  - `<Solution>.<ModuleName>.Application` — Features, Commands, Queries, Handlers.
+  - `<Solution>.<ModuleName>.Contracts` — Public interfaces + DTOs for cross-module use.
+  - `<Solution>.<ModuleName>.Domain` — domain models, aggregates, business rules.
+  - `<Solution>.<ModuleName>.Infrastructure` — module-specific persistence and impl.
+- `Presentation/<Solution>.Host` — ASP.NET Core Web API entrypoint, bootstraps all modules.
+- `<Solution>.slnx` — solution file.
 
 If the existing project uses a different architecture, **follow that architecture** and record the deviation so it stays consistent across the session.
 

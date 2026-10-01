@@ -7,10 +7,17 @@ invalidation, and you'll re-implement all three badly.
 
 ## Library pick
 
-**FusionCache** (`ZiggyCreatures.FusionCache`) is the default. It is a hybrid cache: a fast in-process
-**L1** in front of a shared **L2** (Redis), with cache-stampede protection, fail-safe, soft/hard
-timeouts, and a backplane — all built in. (.NET 9's `HybridCache` is the framework's lighter take on the
-same idea; reach for it only when its smaller feature set is genuinely enough.)
+**Check the project first.** If a hybrid-cache library is already referenced, keep using it — these
+rules (stampede protection, fail-safe, backplane invalidation, jitter) are the requirement, not the
+specific package.
+
+For a new setup, two good options:
+
+- **`HybridCache`** (.NET 9+, `Microsoft.Extensions.Caching.Hybrid`) — in-box, no extra package. Covers
+  L1+L2 and stampede protection out of the box; fewer knobs (no built-in fail-safe/soft-timeout). Prefer
+  it when its feature set is enough — it's one dependency fewer.
+- **FusionCache** (`ZiggyCreatures.FusionCache`) — richer: fail-safe stale-serving, factory soft-timeouts,
+  a backplane. Recommend it (and confirm before adding the package) when the project needs those extras.
 
 ## Rules
 

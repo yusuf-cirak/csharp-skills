@@ -1,11 +1,11 @@
 ---
 name: validation
-description: User's personal rules for hardening untrusted input at the DTO / serialization boundary in ASP.NET Core. Covers the central `InputLimits` constants, length-typed `Text` value objects (`ShortText`/`MediumText`/`LongText`/`XLongText`, `Email`/`Slug`/`Url`/`PhoneNumber`) instead of raw `string`, mandatory FluentValidation rules (MaximumLength, collection caps, `.IsInEnum()`, URL scheme allowlist, control-char rejection, ReDoS-safe regex), global `JsonSerializerOptions` hardening, Kestrel/`FormOptions` limits, per-endpoint size override, mandatory pagination, output encoding, and the forbidden anti-patterns. Use when defining or reviewing request DTOs/commands/queries, request validators, JSON/serialization config, or any code that accepts client input. Use ALONGSIDE `csharp` and `web-api`. Rate limiting, authn, and other network hardening live in `hardening`.
+description: Use when defining or reviewing ASP.NET Core request DTOs/commands/queries, request validators, JSON/serialization config, or any code that accepts client input. Rate limiting, authn, and other network hardening live in `hardening`.
 ---
 
 # ASP.NET Core Input Security & Serialization Limits
 
-Every endpoint, DTO, validator, value object, and JSON configuration MUST enforce hard limits on input size, depth, and shape. Never trust client input. Apply these rules by default — only relax them with an explicit, justified opt-in. Pairs with `web-api` (endpoint shape) and `csharp` (VO/record idioms).
+Every endpoint, DTO, validator, value object, and JSON configuration MUST enforce hard limits on input size, depth, and shape: the central `InputLimits` constants, length-typed `Text` value objects (`ShortText`/`MediumText`/`LongText`/`XLongText`, `Email`/`Slug`/`Url`/`PhoneNumber`) instead of raw `string`, mandatory FluentValidation rules, global `JsonSerializerOptions` hardening, Kestrel/`FormOptions` limits, per-endpoint size override, mandatory pagination, and output encoding. Never trust client input. Apply these rules by default — only relax them with an explicit, justified opt-in. Pairs with `web-api` (endpoint shape) and `csharp` (VO/record idioms).
 
 ## 1. Central `InputLimits` constants
 

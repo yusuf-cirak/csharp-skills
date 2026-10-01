@@ -1,11 +1,11 @@
 ---
 name: index
-description: Entry-point INDEX & router for the user's personal C# / .NET / ASP.NET Core standards. Contains no rules itself — it dispatches to seven focused sub-skills (`csharp`, `ddd`, `web-api`, `validation`, `hardening`, `observability`, `testing`). Invoke this FIRST whenever any C# / .NET / ASP.NET Core work is starting (writing, editing, reviewing, or generating `.cs` / `.csproj` / `.slnx` / `.razor` / `.cshtml` / `Directory.Build.props` / `global.json`), or whenever the user references "the coding standards" generically. Reads the dispatch table below, then invokes EVERY sub-skill the activity calls for (multiple usually apply). MUST be consulted before touching C# even if the user does not mention the standards.
+description: Use at the start of any C# / .NET / ASP.NET Core work (`.cs`/`.csproj`/`.slnx`/`.razor`/`.cshtml`/`Directory.Build.props`/`global.json`) or when the user references "the coding standards" generically — even if the standards aren't mentioned by name.
 ---
 
 # C# / .NET Standards — Router (dotnet:index)
 
-The user's permanent C# rules, split into seven focused sub-skills so concerns stop bleeding into each other. **This file holds no rules — it routes.** Read the dispatch table; invoke EVERY sub-skill the current activity matches. `csharp` is the always-on base layer; layer the others on top as needed.
+The user's permanent C# rules, split into seven focused sub-skills so concerns stop bleeding into each other (`csharp`, `ddd`, `web-api`, `validation`, `hardening`, `observability`, `testing`). **This file holds no rules — it routes.** Read the dispatch table; invoke EVERY sub-skill the current activity matches. `csharp` is the always-on base layer; layer the others on top as needed.
 
 ## How to use this router
 
@@ -20,7 +20,7 @@ The user's permanent C# rules, split into seven focused sub-skills so concerns s
 |---|---|
 | ANY `.cs` edit; records, value objects, DUs, monads, LINQ (ZLinq drop-in), ZString string ops, immutability, naming, performance; `TimeProvider`; keyed DI; Channels/`BackgroundService`; modern C# (collection expr, primary ctors, `required`, `field`); source-gen JSON/AOT; concurrency primitives | **`dotnet:csharp`** (always) |
 | Modeling a domain; aggregates/entities/domain events; strongly-typed ids (Vogen); EF value-object persistence; domain-event dispatch via `SaveChangesInterceptor`; module & layer layout (Modular Monolith); where a vertical slice lives | **`dotnet:ddd`** |
-| Writing endpoints/handlers/controllers; mediator commands/queries (which mediator to pick — MediatR licensing); slice skeleton; FluentValidation basics; pagination shape | **`dotnet:web-api`** |
+| Writing endpoints/handlers/controllers; mediator commands/queries (which mediator to pick — MediatR licensing); slice skeleton; FluentValidation basics; pagination shape; wiring/reordering `Program.cs` middleware | **`dotnet:web-api`** |
 | Request DTOs/commands/queries; input size/length/depth limits; `InputLimits`; length-typed `Text` VOs; JSON/Kestrel/FormOptions hardening; mandatory validator rules; output encoding | **`dotnet:validation`** |
 | Hardening an exposed/multi-tenant service; rate limiting; idempotency; authn/authz (JWT bearer hardening, scopes); forwarded headers; security headers; crypto; ProblemDetails/error handling; HTTP-logging redaction; EF hardening; **resilience pipelines (Polly v8 outbound calls)**; **application caching (hybrid L1/L2)**; file upload; SSRF; deserialization; CI security | **`dotnet:hardening`** |
 | Instrumenting a service; OpenTelemetry traces/metrics/logs; `ActivitySource`/`Meter`; correlation_id/baggage; structured logging processors + source-gen `[LoggerMessage]`; sampling; health checks/probes; SLO & burn-rate alerting; telemetry wiring in `Program.cs` | **`dotnet:observability`** |
@@ -34,7 +34,7 @@ Typical combinations:
 - **Security review of a service** → `hardening` (+ `validation` for the DTO surface).
 - **New test project / test fixture** → `testing` (+ `csharp` for idioms).
 - **Instrumenting / telemetry / health checks** → `observability` (+ `csharp` for constants & alloc-minimal processors, + `hardening` for redaction policy).
-- **New service bootstrap / Program.cs wiring** → `hardening` + `observability` + `validation` (+ `csharp`).
+- **New service bootstrap / Program.cs wiring** → `web-api` (middleware order) + `hardening` + `observability` + `validation` (+ `csharp`).
 - **Production rollout / deployment hardening** → `hardening` + `observability` (+ `validation` for input limits).
 
 ## Decision Notes (global tie-breakers)

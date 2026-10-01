@@ -9,7 +9,7 @@ const bannerLines = [
   "",
   "When working in any C# / .NET / ASP.NET Core context (files: `.cs`, `.csproj`, `.sln`, `.slnx`, `.razor`, `.cshtml`, `Directory.Build.props`, `Directory.Packages.props`, `global.json`; or topics: C#, .NET, ASP.NET Core, EF Core, DDD in .NET, xUnit/NUnit/MSTest), invoke `dotnet:index` via the Skill tool BEFORE writing or modifying code.",
   "",
-  "`dotnet:index` is a router — it dispatches to focused sub-skills (`csharp`, `ddd`, `web-api`, `validation`, `hardening`, `testing`) based on the activity. Read its dispatch table and invoke EVERY sub-skill it recommends for the task (combinations are the norm). Always include `dotnet:csharp` for any `.cs` edit.",
+  "`dotnet:index` is a router — it dispatches to focused sub-skills (`csharp`, `ddd`, `web-api`, `validation`, `hardening`, `observability`, `testing`) based on the activity. Read its dispatch table and invoke EVERY sub-skill it recommends for the task (combinations are the norm). Always include `dotnet:csharp` for any `.cs` edit.",
 ];
 
 const out = {

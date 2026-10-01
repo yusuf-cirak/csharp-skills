@@ -1,11 +1,11 @@
 ---
 name: hardening
-description: User's personal FAANG-level production hardening rules for .NET/ASP.NET Core services exposed to untrusted or multi-tenant traffic. Covers tiered/distributed rate limiting & burst protection, idempotency keys & webhook HMAC, authn/authz (short-lived tokens, refresh rotation + reuse detection, global fallback authorize, resource-level checks, tenant-from-claim), security headers & CORS, cryptography (Argon2id/bcrypt, FixedTimeEquals, managed secrets), ProblemDetails error handling, structured logging & audit, EF Core hardening, secure file upload, SSRF defense, XML/deserialization safety, HTTP caching, application caching (hybrid L1/L2), multi-tenancy isolation, background jobs/outbox, dependency & supply-chain security, OpenTelemetry observability, API versioning/lifecycle, cancellation/timeouts, and CI/test security. Use when hardening a service, doing a security review, configuring middleware/Program.cs, or deploying. Use ALONGSIDE `csharp`, `web-api`, `validation`. DTO-level input size/length limits belong to `validation`.
+description: Use when hardening a .NET/ASP.NET Core service exposed to untrusted or multi-tenant traffic, doing a security review, configuring middleware/`Program.cs`, or deploying. DTO-level input size/length limits belong to `validation`.
 ---
 
 # Production Hardening (FAANG-level)
 
-These rules apply to any service exposed to untrusted networks or multi-tenant traffic. They are non-negotiable defaults; deviations need a written justification on the PR. DTO/serialization input limits are owned by `validation`; this skill covers the network/runtime/ops hardening surface.
+These rules apply to any service exposed to untrusted networks or multi-tenant traffic: tiered/distributed rate limiting & burst protection, idempotency keys & webhook HMAC, authn/authz (short-lived tokens, refresh rotation + reuse detection, resource-level checks, tenant-from-claim), security headers & CORS, cryptography, `ProblemDetails` error handling, structured logging & audit, EF Core hardening, secure file upload, SSRF defense, deserialization safety, HTTP/application caching, multi-tenancy isolation, background jobs/outbox, supply-chain security, and API versioning/lifecycle. They are non-negotiable defaults; deviations need a written justification on the PR. DTO/serialization input limits are owned by `validation`; this skill covers the network/runtime/ops hardening surface.
 
 ## Tiered Rate Limiting & Burst Protection
 
@@ -179,6 +179,23 @@ o.TokenValidationParameters = new()
 - **Secure by default**: register the authenticated fallback policy (above). It also applies to **unmatched routes**, so an anonymous request to an unknown path returns **401, not 404** (route existence is not leaked). Mark health/docs endpoints `AllowAnonymous`.
 - **Scope authorization**: read OAuth scopes from both conventions — a space-delimited `scope` claim **and** repeated `scp` claims. Expose a `.RequireScope("orders:write")` endpoint helper (a policy + `IAuthorizationHandler`) following the same convention as `.RequireIdempotency()`. Roles use the native `.RequireAuthorization(p => p.RequireRole(...))`.
 - **401/403 as problem+json**: wire `JwtBearerEvents.OnChallenge` (401) and `OnForbidden` (403) to write RFC 9457 `ProblemDetails` via `IProblemDetailsService` (consistent with the global handler — same `traceId`/`correlation_id` stamping), set `WWW-Authenticate` on challenge, and **never leak token-validation specifics** to the caller (`OnAuthenticationFailed` stays silent in prod; detail lives in the trace/logs).
+- **Keep the token small; load volatile/high-cardinality claims per-request instead of baking them in.** A token re-issued only every 15 min goes stale the moment a user's group/role membership changes mid-session, and group lists that grow over time bloat every request's `Authorization` header. Implement `IClaimsTransformation` to append those claims *after* authentication, on every request, from a fast cache-backed lookup — the JWT carries only the stable identity (`sub`, core roles); derived/volatile authorization data is always current, never stale for the token's lifetime:
+  ```csharp
+  public sealed class GroupClaimsTransformation(IGroupLookupService groups) : IClaimsTransformation
+  {
+      public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
+      {
+          if (principal.Identity is not { IsAuthenticated: true }) return principal;
+          var userGroupIds = principal.Claims.Where(c => c.Type == ClaimTypes.GroupSid).Select(c => c.Value);
+          var resolved = await groups.GetGroupsAsync(userGroupIds); // cache-backed — see `caching.md`
+          var identity = new ClaimsIdentity(resolved.Select(g => new Claim("group", g.Id.ToString())));
+          principal.AddIdentity(identity);
+          return principal;
+      }
+  }
+  builder.Services.AddTransient<IClaimsTransformation, GroupClaimsTransformation>();
+  ```
+  Register it after `AddAuthentication()`; it runs on every authenticated request (not just login), so keep the lookup cheap (cache-backed, not a cold DB hit every time).
 
 ## Security Headers + CORS
 
@@ -309,6 +326,7 @@ rules + library pick (FusionCache): `../index/references/caching.md`.
 ## Background Jobs & Messaging
 
 - Handlers MUST be idempotent. Concrete dedup: persist a `(message_id, consumer)` **unique** row in the *same transaction* as the handler's state change, and treat a unique-violation on insert (`SQLSTATE 23505` — provider-agnostic, read `DbException.SqlState`) as an idempotent no-op (a concurrent/redelivered duplicate), **not** an error to retry into a poison loop.
+- **The dedup key should be deterministic, not random, when the message is derived from stable content** (reprocessing the same source record, reacting to the same upstream event). A `Guid.NewGuid()` per publish defeats dedup entirely — two publishes for the same logical event get two different ids and both pass the unique-row check. Hash the stable identifying content into a deterministic id instead (a fast non-cryptographic hash — e.g. FNV-1a over the content — folded into a `Guid`) and set it as the message/`MessageId` the dedup check keys on, so re-publishing the same logical event (a retry, a redelivery, a second producer instance) always lands on the same key. Reserve `Guid.CreateVersion7()` (see `csharp`) for ids that must be *unique per occurrence* — the two are solving opposite problems.
 - Retry: exponential backoff with jitter, bounded attempts (default 5). Poison messages → DLQ; alert on DLQ depth.
 - Cross-aggregate writes use the **Outbox pattern** — never dual-write to DB + broker.
 - This section owns **distributed/broker** reliability. For a purely **in-process** producer/consumer queue (no broker), use the `System.Threading.Channels` + `BackgroundService` primitive in `csharp` → Background work & channels.

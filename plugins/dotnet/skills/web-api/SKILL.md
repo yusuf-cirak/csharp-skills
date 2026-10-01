@@ -1,11 +1,11 @@
 ---
 name: web-api
-description: User's personal ASP.NET Core Web API rules — owns HOW requests are shaped and handled. Covers the vertical-slice file skeleton (`static class <Name>Command` holding Endpoint/Request/Validator/Handler/Response), FastEndpoints/Minimal API/MediatR handler wiring, FluentValidation basics (prefer functional/static validators), and the pagination request base. Use when writing or editing endpoints, handlers, controllers, MediatR commands/queries, or validators. Use ALONGSIDE `csharp` (records/monads). Defers input-size/length/serialization limits to `validation`, security/ops (rate limiting, authn, headers) to `hardening`, and module placement to `ddd`.
+description: Use when writing or editing ASP.NET Core endpoints, handlers, controllers, mediator commands/queries, or validators, or when wiring/reordering middleware in `Program.cs`. Defers input-size/length limits to `validation`, security/ops to `hardening`, and module placement to `ddd`.
 ---
 
 # ASP.NET Core Web API
 
-Owns **how requests are shaped and handled** — the endpoint/handler/slice surface. *Where* a slice sits in the module tree comes from `ddd`; record/monad idioms come from `csharp`; hard input limits come from `validation`.
+Owns **how requests are shaped and handled** — the endpoint/handler/slice surface, the vertical-slice file skeleton (`static class <Name>Command` holding Endpoint/Request/Validator/Handler/Response), FastEndpoints/Minimal API/mediator handler wiring, FluentValidation basics, the pagination request base, and `Program.cs` middleware pipeline ordering. *Where* a slice sits in the module tree comes from `ddd`; record/monad idioms come from `csharp`; hard input limits come from `validation`.
 
 ## Vertical slice file
 
@@ -76,10 +76,64 @@ Minimal API binds a route/query parameter to a strongly-typed id for free when t
 app.MapGet("/orders/{id}", (OrderId id) => ...);
 ```
 
+## Middleware pipeline order & registration safety
+
+`Program.cs` composition is sequence-sensitive, and nothing stops a developer from registering a
+middleware before a prerequisite it silently depends on — a custom rate-limit/tenant/idempotency
+middleware that reads `HttpContext.User` registered *before* `UseAuthentication()`, for instance. It
+won't throw; it'll just silently see an unauthenticated principal in prod. Two complementary defenses:
+
+### Canonical order
+
+Exception handling/HSTS → HTTPS redirection → **forwarded headers** (`hardening` → Forwarded Headers —
+MUST be first among anything that reads IP/scheme) → static files → `UseRouting()` → CORS → rate
+limiting (after routing, so it can partition on the matched route template — `hardening` → Rate
+Limiting) → `UseAuthentication()` → `UseAuthorization()` → custom pipeline middleware → endpoints
+(`Map*`). Rule of thumb for *where a new middleware goes*: find what `HttpContext` state it reads
+(`User`, `RemoteIpAddress`, the matched endpoint, response headers already set by an earlier middleware)
+and place it after whatever middleware populates that state.
+
+### Fail fast on a missing prerequisite — follow the framework's own pattern
+
+ASP.NET Core already enforces this for itself: `UseAuthorization()` throws `InvalidOperationException`
+at startup if `UseAuthentication()` was never registered, by checking a marker the framework stamps onto
+`IApplicationBuilder.Properties` when `UseAuthentication()` runs. Don't rely on the framework's own
+(private, version-specific) property key for *your* middleware — define your own marker the same way:
+
+```csharp
+public static class IdempotencyMiddlewareExtensions
+{
+    private const string MarkerKey = "__IdempotencyMiddlewareRegistered"; // this extension's own marker
+
+    public static IApplicationBuilder UseIdempotency(this IApplicationBuilder app)
+    {
+        if (app.ApplicationServices.GetService<IAuthenticationSchemeProvider>() is not null
+            && !app.Properties.ContainsKey("__AuthenticationMiddlewareInvoked")) // set by UseAuthentication()
+        {
+            throw new InvalidOperationException(
+                $"{nameof(UseIdempotency)}() must be called after UseAuthentication() — " +
+                "idempotency keys are scoped per authenticated principal.");
+        }
+
+        app.Properties[MarkerKey] = true; // so a LATER middleware can depend on this one too
+        return app.UseMiddleware<IdempotencyMiddleware>();
+    }
+}
+```
+
+- Stamp `app.Properties[...]` with your own key in every custom `UseX()` extension that something else
+  may legitimately depend on — mirrors the framework's approach without coupling to its private keys.
+- This is a **startup-time** `InvalidOperationException`, not a silent 3am misbehavior — prefer it over a
+  runtime null-check buried in a handler for anything whose correctness depends on pipeline order.
+- Applies beyond auth: a custom `UseTenantResolution()` depending on `UseAuthentication()`, a
+  `UseRequestLogging()` depending on `UseForwardedHeaders()` for the real client IP, an
+  `UseOutputCache()` policy that must sit after authorization, etc. — any ordering dependency a code
+  reviewer could plausibly miss is a candidate for this guard, not just auth.
+
 ## Related skills
 
 - `csharp` — base idioms (records, monads, LINQ).
 - `ddd` — module/slice placement, domain logic.
 - `validation` — request limits, length-typed VOs, validator rules, serialization hardening.
-- `hardening` — rate limiting, authn/authz, headers, error handling, observability.
+- `hardening` — rate limiting, authn/authz, headers, error handling, observability, forwarded headers.
 - `testing` — integration tests (`WebApplicationFactory` + Testcontainers) exercising these endpoints.

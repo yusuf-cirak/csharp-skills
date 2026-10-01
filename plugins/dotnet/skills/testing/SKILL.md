@@ -1,24 +1,24 @@
 ---
 name: testing
-description: User's personal C#/.NET testing standard. Fixed stack — xUnit (test framework), Shouldly (assertions), NSubstitute (mocking, ports only), Testcontainers (real Postgres/Redis in integration tests with Respawn cleanup), Bogus (seeded test-data builders / Object Mother), and NetArchTest (architecture/layer-boundary tests). Covers test project layout & naming, `Method_State_Expectation` naming, AAA structure, asserting on `Result<T>`/`Option<T>` monads, unit-vs-integration split, `ICollectionFixture` Testcontainers base class, and DDD layer-boundary enforcement. MUST be used whenever writing, editing, reviewing, or generating ANY C# test (`*.Tests`/`*.IntegrationTests` projects, `[Fact]`/`[Theory]`, fixtures, test doubles) or setting up a test project. Use ALONGSIDE `csharp`; references domain/endpoint rules from `ddd`, `web-api`, `hardening`.
+description: Use when writing, editing, reviewing, or generating any C# test (`*.Tests`/`*.IntegrationTests` projects, `[Fact]`/`[Theory]`, fixtures, test doubles) or setting up a test project.
 ---
 
 # C# Testing Standard
 
-The user's permanent testing rules. Fixed stack — do not substitute libraries without explicit opt-in. Apply alongside `csharp` (records/monads/idioms). Production-grade CI/SAST/DAST/mutation gates live in `hardening` → CI/Test Security; this skill governs how tests themselves are written.
+The user's personal testing rules — test project layout & naming, `Method_State_Expectation` naming, AAA structure, asserting on `Result<T>`/`Option<T>` monads, unit-vs-integration split, `ICollectionFixture` Testcontainers base class, and DDD layer-boundary enforcement. **Check the project first** (existing test projects' package references): if it already has a test framework/assertion/mocking library, keep using it — these rules are about structure and discipline (naming, AAA, monad assertions, real-dependency integration tests), not about forcing a library swap. On a **new** test project with no existing convention, the recommended default stack is xUnit + Shouldly + NSubstitute + Testcontainers + Respawn + Bogus + NetArchTest (see table below) — propose it and confirm before adding packages the project doesn't have yet. Apply alongside `csharp` (records/monads/idioms). Production-grade CI/SAST/DAST/mutation gates live in `hardening` → CI/Test Security; this skill governs how tests themselves are written.
 
-## Stack (fixed)
+## Recommended stack (new projects; match the existing one otherwise)
 
-| Concern | Library | Note |
-|---|---|---|
-| Test framework | **xUnit** | `[Fact]` / `[Theory]` + `[InlineData]`/`[MemberData]`/`[ClassData]`. |
-| Assertions | **Shouldly** | `result.ShouldBe(x)`. Free/OSS, expressive failure messages. No bare `Assert.*` except where Shouldly lacks an equivalent. |
-| Mocking | **NSubstitute** | `Substitute.For<T>()`. Mock **outbound ports only** (HttpClient handlers, brokers, clocks) — never the domain. |
-| Integration infra | **Testcontainers** | Real Postgres/Redis/etc. via Docker. No in-memory provider for DB-bound tests. |
-| DB reset | **Respawn** | Truncate between integration tests instead of recreating the container. |
-| Test data | **Bogus** | Seeded `Faker<T>`; wrapped in factory-based builders / Object Mother. Deterministic. |
-| Architecture | **NetArchTest** | Enforce DDD layer boundaries. (`ArchUnitNET` acceptable if richer rules needed.) |
-| Coverage | **coverlet** | Collected in CI; threshold gate (see CI section). |
+| Concern | Library | Note | Common alternatives |
+|---|---|---|---|
+| Test framework | **xUnit** | `[Fact]` / `[Theory]` + `[InlineData]`/`[MemberData]`/`[ClassData]`. | NUnit, MSTest — same AAA/naming rules apply. |
+| Assertions | **Shouldly** | `result.ShouldBe(x)`. Free/OSS, expressive failure messages. | FluentAssertions, or bare `Assert.*` for the chosen framework. |
+| Mocking | **NSubstitute** | `Substitute.For<T>()`. Mock **outbound ports only** (HttpClient handlers, brokers, clocks) — never the domain, regardless of library. | Moq, FakeItEasy. |
+| Integration infra | **Testcontainers** | Real Postgres/Redis/etc. via Docker. No in-memory provider for DB-bound tests — this rule holds independent of library choice. | — |
+| DB reset | **Respawn** | Truncate between integration tests instead of recreating the container. | Hand-rolled truncate script. |
+| Test data | **Bogus** | Seeded `Faker<T>`; wrapped in factory-based builders / Object Mother. Deterministic. | AutoFixture, hand-written builders. |
+| Architecture | **NetArchTest** | Enforce DDD layer boundaries. | `ArchUnitNET`. |
+| Coverage | **coverlet** | Collected in CI; threshold gate (see CI section). | Built-in VSTest coverage collector. |
 
 ## Project layout & naming
 
@@ -243,7 +243,7 @@ public void Domain_ShouldNotDependOn_InfrastructureOrApplication()
 {
     var result = Types.InAssembly(DomainAssembly.Reference)
         .Should()
-        .NotHaveDependencyOnAny("GoActivity.*.Infrastructure", "GoActivity.*.Application")
+        .NotHaveDependencyOnAny("<Solution>.*.Infrastructure", "<Solution>.*.Application")
         .GetResult();
 
     result.IsSuccessful.ShouldBeTrue(

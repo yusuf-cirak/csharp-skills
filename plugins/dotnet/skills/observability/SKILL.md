@@ -1,11 +1,11 @@
 ---
 name: observability
-description: User's personal FAANG-level OpenTelemetry-native observability standard for .NET/ASP.NET Core. Covers the three pillars over OTLP — traces (ActivitySource per module, ParentBased ratio sampling, W3C propagation incl. across messaging), metrics (System.Diagnostics.Metrics Meter API, RED + USE, custom instruments, low-cardinality tags, exemplars), and logs (ILogger → OpenTelemetry, NO Serilog by default; source-generated `[LoggerMessage]` by default, CA1848 enforced; snake_case templates, BaseProcessor key/mask/baggage enrichment, tail sampling via per-request buffering) — plus correlation_id/baggage context, Kubernetes health probes (liveness/readiness/startup) with drain-on-shutdown, SLOs with multi-window burn-rate alerts, and the hard-won SDK gotchas. Use when instrumenting a service, wiring telemetry in Program.cs, configuring exporters/processors/sampling, adding metrics, or setting up health checks. Vendor-neutral (OTLP + any collector). Use ALONGSIDE `hardening` (which owns security headers, redaction, rate limiting) and `csharp` (constants, allocation-minimal hot paths).
+description: Use when instrumenting a .NET/ASP.NET Core service, wiring telemetry in `Program.cs`, configuring OpenTelemetry exporters/processors/sampling, adding metrics, or setting up health checks/probes. Vendor-neutral (OTLP + any collector).
 ---
 
 # Observability (OpenTelemetry-native, FAANG-level)
 
-Telemetry is **OpenTelemetry-native and OTLP-first**: traces, metrics, and logs share one `Resource` and one exporter, correlated by trace context with no enricher glue. These are non-negotiable defaults for any service; deviations need a written justification on the PR.
+Telemetry is **OpenTelemetry-native and OTLP-first**: traces (`ActivitySource` per module, `ParentBased` ratio sampling, W3C propagation incl. across messaging), metrics (`System.Diagnostics.Metrics` Meter API, RED + USE, low-cardinality tags, exemplars), and logs (`ILogger` → OpenTelemetry, source-generated `[LoggerMessage]` by default, snake_case templates, key/mask/baggage enrichment, tail sampling) share one `Resource` and one exporter, correlated by trace context with no enricher glue — plus correlation_id/baggage context, Kubernetes health probes with drain-on-shutdown, and SLOs with multi-window burn-rate alerts. These are non-negotiable defaults for any service; deviations need a written justification on the PR.
 
 **Logging stance:** prefer OTel-native (`ILogger → AddOpenTelemetry`) for new services. Reach for Serilog **only** when OTel-native is not possible (a sink/format the OTLP pipeline can't provide). Don't run both.
 

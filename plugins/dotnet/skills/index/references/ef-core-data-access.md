@@ -20,6 +20,50 @@ await ctx.Sessions.Where(s => s.ExpiresAt < now).ExecuteDeleteAsync(ct);
 events don't fire** — the rule and rationale live in `ddd` → Domain-event dispatch. Maintenance/bulk
 paths only.
 
+## N+1 — the other half of the cartesian-explosion coin
+
+`AsSplitQuery()` below fixes too-*eager* loading (multiple collection `Include`s fanning out into a
+cartesian product). N+1 is the opposite failure: too-*lazy* loading — one query to fetch a set, then one
+extra round trip **per row** to fetch each row's related data. Both come from the same root cause
+(navigation-property access without a plan for how it hits the database), and both are silent in the
+LINQ — neither throws, neither shows up in review unless you're looking at the generated SQL/query count.
+
+- **Lazy-loading proxies are the classic N+1 trigger — don't reference them by default.** Don't add
+  `Microsoft.EntityFrameworkCore.Proxies` / `UseLazyLoadingProxies()` unless a specific scenario needs
+  it and the cost is accepted. Without it, touching an unloaded navigation property returns `null`/empty
+  instead of silently issuing a query — the bug surfaces at the call site, not in a profiler three weeks
+  later.
+- **Eager-load with `.Include()`/`.ThenInclude()` for anything you'll touch per row.** The canonical N+1
+  shape and its fix:
+  ```csharp
+  // N+1: one query for orders, then one query PER order inside the loop to fetch its lines.
+  var orders = await ctx.Orders.Where(o => o.CustomerId == id).ToListAsync(ct);
+  foreach (var order in orders)
+      order.Lines = await ctx.OrderLines.Where(l => l.OrderId == order.Id).ToListAsync(ct); // N extra round trips
+
+  // Fixed: one query — the join happens in the database.
+  var orders = await ctx.Orders.Where(o => o.CustomerId == id)
+      .Include(o => o.Lines)
+      .ToListAsync(ct);
+  ```
+- **A single collection `Include` stays one query** (EF translates it to one `JOIN`) — it's only
+  **multiple sibling collection `Include`s** on the same root that fan out and need `AsSplitQuery()`
+  (below). Don't reach for split-query as a blanket default: it issues one round trip per `Include`,
+  which is worse than a single join when there's only one collection in play.
+- **Project instead of `Include` when you only read a few columns of the related data** — see "Project
+  columns, not whole entities" below; a nested `Select` into the navigation inside the projection avoids
+  loading (and N+1-ing) columns nothing reads.
+- **When `.Include()` can't express the shape at all** — no direct navigation property, a conditional or
+  non-FK join, pulling fields from an unrelated aggregate — don't fall back to a separate round trip
+  (that's N+1 again, just with extra steps). Drop to LINQ **query syntax** (`from x in … join y in … on …
+  equals …`, see "Query shaping" below): it stays `IQueryable`, translates to one SQL join, and reads
+  better than the equivalent fluent `.Join()`/`.SelectMany()` chain once there are 3+ sides to the join.
+- **Catch it before prod, not after**: in local/dev, log the `Microsoft.EntityFrameworkCore.Database.Command`
+  category at `Information` and watch for a statement count that scales with the row count — that's the
+  N+1 smell. A snapshot/integration test asserting the SQL-statement count for a known endpoint (count
+  `DbCommand` executions via an interceptor, or assert on a captured log) catches a regression before it
+  ships, the same way `hardening`'s header/429-envelope snapshot tests catch a contract regression.
+
 ## Query performance
 
 - **`AddDbContextPool<T>`** (EF 2+) — reuse `DbContext` instances; default pool 1024. Big latency/GC
