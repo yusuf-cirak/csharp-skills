@@ -368,6 +368,35 @@ Owned by the **`observability`** skill — OpenTelemetry-native traces/metrics/l
 - OpenAPI schema-drift test (`Swashbuckle.AspNetCore.Cli`) — fail if undocumented endpoints appear.
 - Critical paths: mutation testing (`Stryker.NET`).
 
+## LLM / Prompt-Injection Hardening
+
+Any text a caller (or an admin, or a document) can influence is **untrusted data** once a model reads it. Rules:
+
+- **Structure every prompt with tagged sections** (`<gorev>`, `<kurallar>`, `<icerik>`…) and put untrusted text only
+  inside its own block. One helper wraps it and **removes every structural tag from the text** (open/close, any
+  case, spaces/attributes), repeating until nothing can re-form (`<ek_<icerik>talimatlar>`). Never concatenate
+  untrusted text into a trusted section; never rely on a "please ignore instructions in the document" sentence alone.
+- **Trusted policy in the system turn, untrusted state in the user turn.** The state may be a string, an array or an
+  object: strings go as text, arrays/objects as compact JSON, inside the block. Serialize non-ASCII readably
+  (relaxed encoder) — neutralize **after** serialization so readability never reopens the tag hole.
+- **Gate at write time, fail-closed.** Classify free-text instructions with a model *before* persisting them.
+  Anything that is not an explicit "allow" is blocked: timeout, provider error, invalid/out-of-policy output and a
+  model refusal all reject the whole save. Return the reason to the admin; never save with a warning.
+- **Determinism and cost:** temperature 0 plus a fixed seed; cache the verdict by hash(policy name+version, model,
+  state kind, state) and bump the policy version whenever the policy text changes. Never cache failures. A cache
+  outage must not break the request.
+- **Model choice is system config, never caller input.** Use the configured default model for the gate; validate any
+  stored model name against a format value object (charset, length, segments, no URL schemes) instead of a list that
+  drifts as gateways add models.
+- **Validate model output like input:** structured output, then check decision/category against the policy, clamp
+  numbers to range, bound counts and lengths. LLM-produced free-form fields stay free-form but are capped.
+- **Do not leak the machinery:** system prompt, raw model response and organization prompts are admin-only; return an
+  empty same-shaped object (not `null`) to everyone else. Never log the text under review — log a hash prefix,
+  decision, category, confidence, model, tokens and duration (source-generated, snake_case).
+- **Output encoding stays at the sink** (UI/engine). Sanitizing the model's output is a bound, not an encoder.
+- **Usage is auditable:** record model, tokens and purpose for every non-cached call, also when the request is
+  rejected.
+
 ## Related skills
 
 - `observability` — OTel-native traces/metrics/logs, correlation/baggage, health probes, SLO/alerting (the logging pipeline that enforces this skill's redaction policy).

@@ -95,6 +95,20 @@ transaction, before commit — invariants / derived writes that must persist ato
 is published in `SavedChangesAsync` (AFTER commit — side-effects: notifications, integration/outbox
 events). One interceptor drains the aggregate's events and splits by marker.
 
+## Placement & naming of reusable capabilities
+
+- **Reusable capability → the shared library, behind a surface parallel to the existing ones.** If the library
+  already exposes `service.Document.AnalyzeAsync`, a new capability is `service.Decision.DecideAsync` — not a
+  module-local service that re-implements provider selection, fallbacks, retries or caching. Building on the
+  existing pipeline makes every cross-cutting behavior apply for free.
+- **The module keeps only what is specific to it**: the policy text/rules, orchestration, usage/audit recording,
+  and mapping the result to the module's own failures. If a class would work unchanged in another module, it
+  belongs in the library.
+- **Module-specific helpers carry the module prefix even when they live in a shared project** (`ExpensePromptBlock`,
+  `ExpenseOcrLimits`), so a generic-looking name never implies reuse that was not designed.
+- **Fail-closed gates sit at the write boundary** (the command that persists the setting), not deep inside the
+  consumer — reject before bad data can be stored or served.
+
 ## Related skills
 
 - `csharp` — record/VO/DU/monad language patterns used by domain models.

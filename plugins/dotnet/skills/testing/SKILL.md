@@ -259,6 +259,26 @@ Minimum rules: Domain depends on nothing outward; Application never references I
 - Tests run in CI on every PR; integration tests need Docker available on the runner.
 - Mutation testing (`Stryker.NET`) on critical domain paths — owned by `hardening` → CI/Test Security.
 
+## LLM & security tests
+
+- **Test both corpora.** A guard that blocks every attack but also blocks legitimate input is broken: keep an
+  adversarial set (including the original pentest/bug payloads) **and** a benign set with look-alikes
+  ("system number", "IBAN") to catch false positives.
+- **Prove the fix matters.** Run the same payloads against the pre-fix behavior (legacy prompt/format) as an
+  informational baseline test, so "blocked" is compared with "was exploitable".
+- **An escape hatch must check its reason.** A test that tolerates a refusal/denial may only accept that *specific*
+  outcome (the refusal marker); a generic failure — bad key, timeout, 500 — must fail the test, otherwise it passes
+  vacuously.
+- **Real-provider tests are opt-in**: `[Trait("Category","Integration")]`, skipped unless the environment provides
+  credentials (or the app's own secret provider is enabled by a flag); keys live in memory only and are never
+  printed or written. Assert invariants (field names, blocked/allowed, bounds), not exact model text.
+- **Repeat after every prompt/policy change.** Model output is not deterministic even at temperature 0; a regression
+  can show on the second run (one payload slipped through after a format change) — run the corpus several times
+  and tighten the policy text, not the assertion.
+- **Fake the transport, not the logic.** Unit-test request construction with a fake `HttpMessageHandler`: system turn
+  == trusted policy, user turn == the wrapped state, temperature/seed/schema name/model are what you intend, tags
+  injected by the state never escape their block, cache hit/miss/outage and every failure path behave as specified.
+
 ## Anti-patterns (forbidden)
 
 - EF in-memory or SQLite standing in for the real database in DB-bound tests — use Testcontainers.
