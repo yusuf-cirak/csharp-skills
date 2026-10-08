@@ -35,7 +35,7 @@ Re-route at these checkpoints: a new file type or layer enters the change; a log
 
 Match the dotnet/runtime, EF Core, and ASP.NET Core source conventions:
 
-- Private instance fields `_camelCase`; static fields `s_`; thread-static fields `t_`.
+- Private instance fields `_camelCase` (`private readonly ISqlExpressionFactory _sqlFactory;`); static fields `s_`; thread-static fields `t_`.
 - Write the visibility modifier first, even when it is the default (`private static`; `abstract`/`virtual` follow visibility).
 - Language keywords over BCL names: `int`/`string`/`float`.
 - `var` when the right-hand side states the type (`new`, cast, literal); spell the type out when the RHS is a method call with a non-obvious return type.
@@ -57,11 +57,11 @@ Abstract base record + sealed derived records, the whole union in one file, one 
 
 ## State as types
 
-An entity with state-specific operations models state as types: payload → discriminated union; entity → abstract base + sealed per-state subtypes. Each operation exists only on the states where it is legal. Capability interfaces (`IApprovable`/`IRejectable`) mark transitions; `Try*` methods pattern-match and return a new immutable state. `_ => throw` arms cover genuinely impossible states; expected outcomes return a state. Full worked example: `references/state-as-types.md`.
+An entity with state-specific operations models state as types: payload → discriminated union; entity → abstract base + sealed per-state subtypes. Each operation exists only on the states where it is legal. Capability interfaces (`IApprovable`/`IRejectable`) mark transitions; `Try*` methods pattern-match and return a new immutable state. A subtype's construction guard (`Assert<T1,T2>()`) restricts which states it can wrap. `_ => throw` arms cover genuinely impossible states; expected outcomes return a state. Full worked example: `references/state-as-types.md`.
 
 ## Value objects
 
-Records, the whole value object in one file, one static factories class with one method per variant, inheriting `ValueObject` / `ValueObject<T>`. Base type, `Text` example, JSON and EF converters: `references/value-object-base.md`. Length-typed `Text` VOs for request DTOs live in `dotnet:validation`.
+Records, the whole value object in one file, one static factories class with one method per variant, inheriting `ValueObject` / `ValueObject<T>`. Base type, `Text` example, JSON and EF converters: `references/value-object-base.md`. Length-typed `Text` VOs for request DTOs (`ShortText`/`MediumText`/…) live in `dotnet:validation`.
 
 ## Errors
 
@@ -70,7 +70,7 @@ Records, the whole value object in one file, one static factories class with one
 ## Modern C#
 
 - `<Nullable>enable</Nullable>` project-wide; `required` members express construction-time contracts.
-- Collection expressions `[..]` for init and spread: `int[] ids = [..left, ..right, 0];`.
+- Collection expressions `[..]` for init and spread (`int[] ids = [..left, ..right, 0];`), preferred over `.Concat().ToArray()` for fixed shapes.
 - Primary constructors on services, DI types, and records; explicit `_field` on mutable stateful classes where the captured parameter would mask a field.
 - List/property patterns over index-and-length checks; `file`-local types for single-file helpers.
 - `field` keyword (C# 14) for validated properties without a hand-declared backing field.
@@ -78,7 +78,7 @@ Records, the whole value object in one file, one static factories class with one
 
 ## Time
 
-Inject `TimeProvider` and call `GetUtcNow()` / `GetTimestamp()` / `GetElapsedTime()` / `CreateTimer()`. Production binds `TimeProvider.System`; tests inject `FakeTimeProvider` and `Advance(...)` (see `dotnet:testing`). Code under test reads time and ids through injected abstractions (`TimeProvider`, an id factory).
+`TimeProvider` is the time abstraction: inject it and call `timeProvider.GetUtcNow()` / `GetTimestamp()` / `GetElapsedTime()` / `CreateTimer()`. It replaces a hand-rolled `IClock`, and code under test takes time and ids from injected abstractions instead of `DateTime.Now`, `DateTimeOffset.UtcNow`, or `Guid.NewGuid()`. Production binds `TimeProvider.System`; tests inject `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`) and call `Advance(...)` (see `dotnet:testing`).
 
 ```csharp
 public sealed class Subscription(TimeProvider time)
