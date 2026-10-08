@@ -78,7 +78,7 @@ Records, the whole value object in one file, one static factories class with one
 
 ## Time
 
-`TimeProvider` is the time abstraction: inject it and call `timeProvider.GetUtcNow()` / `GetTimestamp()` / `GetElapsedTime()` / `CreateTimer()`. It replaces a hand-rolled `IClock`, and code under test takes time and ids from injected abstractions instead of `DateTime.Now`, `DateTimeOffset.UtcNow`, or `Guid.NewGuid()`. Production binds `TimeProvider.System`; tests inject `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`) and call `Advance(...)` (see `dotnet:testing`).
+`TimeProvider` is the time abstraction: inject it and call `timeProvider.GetUtcNow()` / `GetTimestamp()` / `GetElapsedTime()` / `CreateTimer()`. It replaces a hand-rolled `IClock`, and code under test takes time from it instead of `DateTime.Now` / `DateTimeOffset.UtcNow`, and ids from `Guid.CreateVersion7(timeProvider.GetUtcNow())` (time-ordered, deterministic under `FakeTimeProvider`) instead of `Guid.NewGuid()`. Secrets and tokens come from `RandomNumberGenerator`, since v7 ids expose their creation time. Production binds `TimeProvider.System`; tests inject `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`) and call `Advance(...)` (see `dotnet:testing`).
 
 ```csharp
 public sealed class Subscription(TimeProvider time)
