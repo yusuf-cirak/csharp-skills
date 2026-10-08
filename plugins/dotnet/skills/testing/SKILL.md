@@ -55,7 +55,7 @@ public sealed class ShortTextFactoryTests
 
 ## Asserting on monads
 
-Domain factories/handlers return `Result<T>`/`Option<T>` (see `../index/references/monads.md`). Assert on the monad, never via try/catch:
+Domain factories/handlers return `Result<T>`/`Option<T>` (see `../csharp/references/monads.md`). Assert on the monad, never via try/catch:
 
 - Success: `result.IsSuccess.ShouldBeTrue();` then `result.Value.ShouldBe(...)`.
 - Failure: `result.IsFailure.ShouldBeTrue();` then assert the error.

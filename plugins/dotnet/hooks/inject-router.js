@@ -1,19 +1,23 @@
 #!/usr/bin/env node
 // dotnet SessionStart hook.
-// Injects the C# / .NET router instruction into every session so `dotnet:index`
-// is invoked for C# work WITHOUT requiring a manual block in the user's global CLAUDE.md.
-// Portable: ships with the plugin, active on any machine right after install.
+// Injects the C# / .NET entry point into every session so `dotnet:csharp` is invoked
+// for C# work WITHOUT a manual block in the user's global CLAUDE.md.
+// Claude Code reads the nested hookSpecificOutput.additionalContext shape; a top-level
+// additionalContext is ignored.
 
-const bannerLines = [
-  "# C# / .NET Auto-Standards (dotnet)",
+const banner = [
+  "# C# / .NET house style (dotnet)",
   "",
-  "When working in any C# / .NET / ASP.NET Core context (files: `.cs`, `.csproj`, `.sln`, `.slnx`, `.razor`, `.cshtml`, `Directory.Build.props`, `Directory.Packages.props`, `global.json`; or topics: C#, .NET, ASP.NET Core, EF Core, DDD in .NET, xUnit/NUnit/MSTest), invoke `dotnet:index` via the Skill tool BEFORE writing or modifying code.",
+  "For any C# / .NET / ASP.NET Core work (`.cs`, `.csproj`, `.sln`, `.slnx`, `.razor`, `.cshtml`, `Directory.Build.props`, `Directory.Packages.props`, `global.json`; or topics: C#, .NET, EF Core, DDD in .NET, xUnit/NUnit/MSTest), invoke `dotnet:csharp` with the Skill tool before the first edit.",
   "",
-  "`dotnet:index` is a router — it dispatches to focused sub-skills (`csharp`, `ddd`, `web-api`, `validation`, `hardening`, `observability`, `testing`) based on the activity. Read its dispatch table and invoke EVERY sub-skill it recommends for the task (combinations are the norm). Always include `dotnet:csharp` for any `.cs` edit.",
-];
+  "`dotnet:csharp` holds the core style and the signal table for the sibling skills (`dotnet:ddd`, `dotnet:web-api`, `dotnet:validation`, `dotnet:hardening`, `dotnet:observability`, `dotnet:testing`). Invoke every sibling whose signal appears in the work.",
+].join("\n");
 
-const out = {
-  additionalContext: bannerLines.join("\n"),
-};
-
-console.log(JSON.stringify(out));
+console.log(
+  JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "SessionStart",
+      additionalContext: banner,
+    },
+  }),
+);

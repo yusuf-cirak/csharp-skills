@@ -4,19 +4,19 @@ Personal C# / .NET / ASP.NET Core coding standards, packaged as a Claude Code pl
 
 ## What's inside
 
-A 7-skill family (plugin name: `dotnet`) fronted by a thin **router** (no rules, just a dispatch table + shared `references/`):
+A 7-skill family (plugin name: `dotnet`). `dotnet:csharp` is the entry point: core style rules, a signal table that routes to the sibling skills, and the shared `references/`:
 
 | Skill | Scope |
 |---|---|
-| `dotnet:index` | Router / index — dispatches to the others |
-| `dotnet:csharp` | Always-on base: namespaces, immutable records + factories, DUs, value objects, monads, LINQ, performance |
+| `dotnet:csharp` | Entry point + core style: namespaces, immutable records + factories, DUs, value objects, `Result<T>`; signal table to the siblings; `references/` for LINQ, performance, async, composition, EF, caching |
 | `dotnet:ddd` | DDD tactical patterns, Modular Monolith + Vertical Slice layout |
 | `dotnet:web-api` | Endpoint/handler/slice shape, MediatR/FastEndpoints, FluentValidation basics, pagination |
 | `dotnet:validation` | `InputLimits`, length-typed `Text` VOs, validator rules, JSON/Kestrel hardening, output encoding |
 | `dotnet:hardening` | Rate limiting, idempotency, authn/authz, headers, crypto, EF hardening, SSRF, observability, CI |
+| `dotnet:observability` | OpenTelemetry traces/metrics/logs, health probes, SLOs |
 | `dotnet:testing` | xUnit + Shouldly + NSubstitute + Testcontainers + Bogus + NetArchTest |
 
-Shared `references/` (single source of truth) live next to the router under `index/references/`: `value-object-base.md`, `input-limits.md`, `monads.md`. Cross-skill links are **relative** (`../index/references/...`) so they resolve both as a plugin and as loose `~/.claude/skills`.
+Shared `references/` (single source of truth) live under `csharp/references/`. Cross-skill links are **relative** (`../csharp/references/...`) so they resolve both as a plugin and as loose `~/.claude/skills`.
 
 ## Install
 
@@ -36,7 +36,7 @@ Already installed under the old `@yc` name? The marketplace key does not re-key 
 /reload-plugins
 ```
 
-(The plugin was renamed `yc-dotnet` → `dotnet`, so skill namespaces are now `dotnet:*`. If your global `CLAUDE.md` references the old `yc-dotnet:index`, update it to `dotnet:index`.)
+(The plugin was renamed `yc-dotnet` → `dotnet`, so skill namespaces are now `dotnet:*`. If your global `CLAUDE.md` references the old `yc-dotnet:index`, update it to `dotnet:csharp`.)
 
 ## After installing — remove the loose copies
 
@@ -50,7 +50,7 @@ aspnetcore-production-hardening/  csharp-testing/
 
 ## CLAUDE.md note
 
-The global `~/.claude/CLAUDE.md` block that names `dotnet:index` as the mandatory entry point is **user config**, not a plugin artifact — it does not ship in this plugin. Keep it in your own dotfiles. The skill `description` fields already carry the "MUST be used" triggers, so the standards still activate without it; the CLAUDE.md block just reinforces routing through `dotnet:index`.
+The global `~/.claude/CLAUDE.md` block that names `dotnet:csharp` as the entry point is **user config**, not a plugin artifact — it does not ship in this plugin. Keep it in your own dotfiles. The plugin's SessionStart hook already injects the `dotnet:csharp` entry point; the CLAUDE.md block is an optional second reinforcement.
 
 ## Editing workflow
 

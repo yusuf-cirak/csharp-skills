@@ -1,6 +1,6 @@
 ---
 name: ddd
-description: Use when modeling a .NET domain, adding or changing an aggregate/entity/domain-event, scaffolding a new module or feature, or deciding project/layer layout. NOT for request validation, JSON/serialization config, or endpoint wiring — see `web-api` / `validation`.
+description: Use when modeling a .NET domain, adding or changing an aggregate/entity/domain-event, scaffolding a new module or feature, or deciding project/layer layout. Request validation and JSON config live in `validation`; endpoint wiring in `web-api`.
 ---
 
 # .NET Domain-Driven Design & Architecture
@@ -13,13 +13,13 @@ Owns **where domain logic lives** and how the solution is structured: DDD tactic
 - Pass services into domain methods as parameters when needed — only for operations without side effects.
 - Use **Domain Events** for cross-cutting concerns.
 - Domain models: **private constructor + static factory methods**. Never construct directly when a factory exists.
-- Validation goes in the factory method. Return a monad type (`Result<T>` / `Option<T>` — from YC.Monad if available, otherwise the codebase's existing equivalent) when validation can fail. See `../index/references/monads.md`.
-- Use **value objects** for complex primitives. Hand-rolled base: `../index/references/value-object-base.md`; source-generated (Vogen `[ValueObject<string>]`, `NormalizeInput`/`Validate`/`[GeneratedRegex]`): `../index/references/strongly-typed-ids-and-value-objects.md`.
+- Validation goes in the factory method. Return a monad type (`Result<T>` / `Option<T>` — from YC.Monad if available, otherwise the codebase's existing equivalent) when validation can fail. See `../csharp/references/monads.md`.
+- Use **value objects** for complex primitives. Hand-rolled base: `../csharp/references/value-object-base.md`; source-generated (Vogen `[ValueObject<string>]`, `NormalizeInput`/`Validate`/`[GeneratedRegex]`): `../csharp/references/strongly-typed-ids-and-value-objects.md`.
 - Use **discriminated unions** for types with multiple variants.
 - Model aggregate/entity **state machines as types**, not boolean flags or a status enum: sealed
   per-state subtypes that expose only their legal operations, a DU for the state payload, capability
   interfaces, and `Try*` pattern-matched transitions. Persistence keeps the rich domain model separate
-  from the flat DB shape (or stores polymorphic JSON). Full pattern: `../index/references/state-as-types.md`.
+  from the flat DB shape (or stores polymorphic JSON). Full pattern: `../csharp/references/state-as-types.md`.
 
 ## Modular Monolith Architecture
 
@@ -55,7 +55,7 @@ An entity id is never a raw `Guid`/`int` (prevents `customerId == orderId` mixin
 Two acceptable forms: a `ValueObject<T>` id (see `value-object-base.md`) when it should share the VO
 base + factory rules, or a **Vogen** `[ValueObject<Guid>]` when you want equality/validation/converters
 generated. Full Vogen depth (int reference-data ids, converter registration, `IParsable`, packaging,
-`TryFrom` vs `Result`): `../index/references/strongly-typed-ids-and-value-objects.md`.
+`TryFrom` vs `Result`): `../csharp/references/strongly-typed-ids-and-value-objects.md`.
 
 ## Persisting domain types (EF Core)
 
@@ -64,7 +64,7 @@ Value objects and strongly-typed ids map to the DB without leaking persistence i
 - **Complex types** (`ComplexProperty`, EF/.NET 8) for multi-field VOs that share the owner's table.
 - **Value converters** (`HasConversion`, EF 5+) for single-value VOs / ids — Vogen ships one.
 
-Full idioms + query-perf rules: `../index/references/ef-core-data-access.md`.
+Full idioms + query-perf rules: `../csharp/references/ef-core-data-access.md`.
 
 ## Domain-event dispatch (concrete)
 

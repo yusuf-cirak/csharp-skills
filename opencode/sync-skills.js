@@ -5,8 +5,8 @@
 //   node opencode/sync-skills.js --link   # symlink each skill (true single-source; Windows
 //                                          # may need Developer Mode / elevation for symlinks)
 //
-// Skills are copied with their original folder names (index, csharp, ddd, web-api, validation,
-// hardening, observability, testing) so the relative cross-skill links (../index/references/...)
+// Skills are copied with their original folder names (csharp, ddd, web-api, validation,
+// hardening, observability, testing) so the relative cross-skill links (../csharp/references/...)
 // keep resolving. Idempotent: re-running overwrites the destination.
 
 const fs = require("fs");
@@ -56,4 +56,4 @@ for (const name of skills) {
 }
 
 console.log(`\n${count}/${skills.length} skills synced to ${destRoot}`);
-console.log("Invoke in opencode via the skill tool by bare name, e.g. skill({ name: \"index\" }).");
+console.log("Invoke in opencode via the skill tool by bare name, e.g. skill({ name: \"csharp\" }).");

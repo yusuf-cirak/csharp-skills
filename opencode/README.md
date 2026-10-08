@@ -17,11 +17,11 @@ node opencode/sync-skills.js          # copy into ~/.config/opencode/skills/
 node opencode/sync-skills.js --link   # or symlink (true single-source; re-edits propagate)
 ```
 
-This places `index/`, `csharp/`, `ddd/`, `web-api/`, `validation/`, `hardening/`,
+This places `csharp/`, `ddd/`, `web-api/`, `validation/`, `hardening/`,
 `observability/`, `testing/` under `~/.config/opencode/skills/`, preserving folder names so the
-relative `../index/references/...` links keep resolving.
+relative `../csharp/references/...` links keep resolving.
 
-> **Name-collision note:** opencode keys skills by folder name, so generic names like `index` and
+> **Name-collision note:** opencode keys skills by folder name, so generic names like
 > `testing` share the global `~/.config/opencode/skills/` namespace. If you already have skills
 > with those names, prefer the project-scoped dir `./.opencode/skills/` instead, or rename.
 
@@ -45,12 +45,11 @@ array in `opencode.json` instead:
 
 ## Usage
 
-In a C# / .NET context, opencode invokes the router first, then the dispatched sub-skills —
+In a C# / .NET context, opencode invokes `csharp` first, then the siblings its signal table matches —
 by **bare name** (the `dotnet:` prefix in the router text is the Claude Code namespace; ignore
 it here):
 
 ```
-skill({ name: "index" })   # read the dispatch table
 skill({ name: "csharp" })  # always, for any .cs edit
 skill({ name: "web-api" })  # + whatever else the activity matches
 ```

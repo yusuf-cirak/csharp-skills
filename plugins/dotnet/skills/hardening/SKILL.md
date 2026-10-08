@@ -291,7 +291,7 @@ Every outbound `HttpClient` carries a **Polly v8 resilience pipeline** — don't
 Default to `AddStandardResilienceHandler()` (retry + total/per-try timeout + circuit-breaker + hedging);
 custom pipelines order strategies outer→inner. **Retry only idempotent calls**; jitter is mandatory; the
 SSRF handler composes **inside** the pipeline. Pipelines emit OTel automatically. Full rules + ordering +
-chaos-testing (`AddChaosFault`/Simmy): `../index/references/resilience.md`.
+chaos-testing (`AddChaosFault`/Simmy): `../csharp/references/resilience.md`.
 
 ## XML / Deserialization Safety
 
@@ -315,7 +315,7 @@ chaos-testing (`AddChaosFault`/Simmy): `../index/references/resilience.md`.
 
 Don't hand-roll a cache layer or run a bare `IDistributedCache`. Default to a **hybrid L1 (in-process) +
 L2 (Redis)** cache with stampede protection, fail-safe stale-serving, and cross-node invalidation. Full
-rules + library pick (FusionCache): `../index/references/caching.md`.
+rules + library pick (FusionCache): `../csharp/references/caching.md`.
 
 ## Multi-Tenancy
 

@@ -12,7 +12,7 @@ Capture what THIS session actually taught (the *why* behind decisions), keep onl
 
 1. **Locate the skills repo (git-backed source, NOT the cache).**
    - `ls -d ~/.claude/plugins/marketplaces/*/plugins/dotnet/skills` — that dir tree is the source of truth.
-   - The shared references live in `skills/index/references/`; the router is `skills/index/SKILL.md`; sub-skills are `skills/<name>/SKILL.md`.
+   - The shared references live in `skills/csharp/references/`; the entry point and routing table is `skills/csharp/SKILL.md`; sibling skills are `skills/<name>/SKILL.md`.
    - `git -C <repo-root> remote -v` and `git -C <repo-root> log --oneline -5` to confirm the repo and its commit style. NEVER edit the `~/.claude/plugins/cache/**` copies as the source — only sync them after (see step 7).
 
 2. **Gather this session's changes.** Review the diffs/edits made in the working project this session and recall the decisions behind them. Focus on reusable rules, not the mechanical edits or repo-specific names.
@@ -24,8 +24,8 @@ Capture what THIS session actually taught (the *why* behind decisions), keep onl
 5. **Present & ask — write NOTHING yet.** Show the surviving lessons as a numbered list. Use **AskUserQuestion** to confirm which to add (all / a subset / edits). Stop here until the user answers.
 
 6. **Add the approved bullets** to the best-fitting existing file, matching its tone/format:
-   - EF Core / query shaping / data access → `skills/index/references/ef-core-data-access.md`
-   - C# language idioms, LINQ, perf, concurrency → `skills/csharp/SKILL.md`
+   - EF Core / query shaping / data access → `skills/csharp/references/ef-core-data-access.md`
+   - C# language idioms → `skills/csharp/SKILL.md`; LINQ → `references/linq.md`; perf → `references/performance.md`; async/concurrency → `references/async-concurrency.md`; options/DI/library surface → `references/composition.md`
    - endpoints/handlers/mediator → `web-api`; DTO/validation limits → `validation`; security/resilience/caching → `hardening`; telemetry → `observability`; domain modeling → `ddd`; tests → `testing`.
    - Prefer appending to an existing section; add a new section only if none fits. Keep the split — don't dump everything in one file.
 

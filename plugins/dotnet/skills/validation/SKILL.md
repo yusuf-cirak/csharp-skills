@@ -12,11 +12,11 @@ Every endpoint, DTO, validator, value object, and JSON configuration MUST enforc
 All length / size / count limits live in one shared static class (place in `BuildingBlocks.Domain` or the project's equivalent shared layer). Validators, value objects, endpoints, and Kestrel config reference these — never inline magic numbers.
 
 Canonical definition (single source of truth):
-→ `../index/references/input-limits.md`
+→ `../csharp/references/input-limits.md`
 
 ## 2. Length-typed `Text` value objects
 
-Free-form `string` properties on DTOs/domain are forbidden. Use a value object whose type carries the length constraint, so the limit cannot be forgotten. Factories return `Result<T>` (YC.Monad if available; otherwise the codebase's existing monad — see `../index/references/monads.md`). The `ValueObject<T>` base is in `../index/references/value-object-base.md`.
+Free-form `string` properties on DTOs/domain are forbidden. Use a value object whose type carries the length constraint, so the limit cannot be forgotten. Factories return `Result<T>` (YC.Monad if available; otherwise the codebase's existing monad — see `../csharp/references/monads.md`). The `ValueObject<T>` base is in `../csharp/references/value-object-base.md`.
 
 ```csharp
 public sealed record ShortText : ValueObject<string>
@@ -67,7 +67,7 @@ RuleFor(x => x.Tags).NotNull();   // missing count cap
 
 ## 3b. Validators run in the pipeline (mediator pipeline behavior)
 
-Validators MUST execute **before** the handler, automatically — not by a hand-written `Validate()` call the developer can forget. Register a mediator `IPipelineBehavior` that runs every `IValidator<TRequest>` and short-circuits on failure. Works with whichever mediator the project uses — which one to pick (MediatR is commercial from v13; default is the free source-gen `Mediator`) is decided in `../index/references/mediator.md`.
+Validators MUST execute **before** the handler, automatically — not by a hand-written `Validate()` call the developer can forget. Register a mediator `IPipelineBehavior` that runs every `IValidator<TRequest>` and short-circuits on failure. Works with whichever mediator the project uses — which one to pick (MediatR is commercial from v13; default is the free source-gen `Mediator`) is decided in `../csharp/references/mediator.md`.
 
 ```csharp
 public sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidator<TRequest>> validators)

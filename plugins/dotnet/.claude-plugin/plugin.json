@@ -1,10 +1,19 @@
 {
   "name": "dotnet",
-  "version": "2.9.0",
-  "description": "Personal C# / .NET / ASP.NET Core coding standards: a focused 8-skill family (csharp, ddd, web-api, validation, hardening, observability, testing) fronted by a thin index router with shared references.",
+  "version": "3.0.0",
+  "description": "Personal C# / .NET / ASP.NET Core coding standards: a 7-skill family (csharp entry point + ddd, web-api, validation, hardening, observability, testing) with shared references under csharp/references.",
   "author": {
     "name": "Yusuf Cirak",
     "email": "rewal34@gmail.com"
   },
-  "keywords": ["csharp", "dotnet", "aspnetcore", "ddd", "testing", "observability", "opentelemetry", "coding-standards"]
+  "keywords": [
+    "csharp",
+    "dotnet",
+    "aspnetcore",
+    "ddd",
+    "testing",
+    "observability",
+    "opentelemetry",
+    "coding-standards"
+  ]
 }
