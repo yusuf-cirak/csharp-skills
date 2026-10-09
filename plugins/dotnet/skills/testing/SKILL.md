@@ -1,24 +1,37 @@
 ---
 name: testing
-description: Use when writing, editing, reviewing, or generating any C# test (`*.Tests`/`*.IntegrationTests` projects, `[Fact]`/`[Theory]`, fixtures, test doubles) or setting up a test project.
+description: Sets the C# testing standard. Use when writing, editing, reviewing, or generating any C# test (`*.Tests`/`*.IntegrationTests` projects, `[Fact]`/`[Theory]`, fixtures, test doubles) or setting up a test project.
 ---
 
 # C# Testing Standard
 
+## Contents
+
+- Recommended stack (new projects; match the existing one otherwise)
+- Project layout & naming
+- Asserting on monads → `../csharp/references/monads.md`
+- Unit tests → `dotnet:csharp`
+- Test data — Bogus builders
+- Integration tests — Testcontainers → `dotnet:hardening`
+- Testing middleware & Activity/baggage
+- Auth integration tests
+- Architecture tests (DDD boundaries) → `dotnet:ddd`
+- Coverage / CI → `dotnet:hardening`
+- LLM & security tests
+- Anti-patterns (forbidden)
+- Related skills → `dotnet:csharp`, `dotnet:ddd`, `dotnet:web-api`, `dotnet:validation`, `dotnet:hardening`, `dotnet:observability`
+
+## Files
+
+- `../csharp/references/monads.md` — Monadic error handling — library selection & usage
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture
+- `dotnet:web-api` (`../web-api/SKILL.md`) — ASP.NET Core Web API
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
+- `dotnet:observability` (`../observability/SKILL.md`) — Observability (OpenTelemetry-native, FAANG-level)
+
 The user's personal testing rules — test project layout & naming, `Method_State_Expectation` naming, AAA structure, asserting on `Result<T>`/`Option<T>` monads, unit-vs-integration split, `ICollectionFixture` Testcontainers base class, and DDD layer-boundary enforcement. **Check the project first** (existing test projects' package references): if it already has a test framework/assertion/mocking library, keep using it — these rules are about structure and discipline (naming, AAA, monad assertions, real-dependency integration tests), not about forcing a library swap. On a **new** test project with no existing convention, the recommended default stack is xUnit + Shouldly + NSubstitute + Testcontainers + Respawn + Bogus + NetArchTest (see table below) — propose it and confirm before adding packages the project doesn't have yet. Apply alongside `csharp` (records/monads/idioms). Production-grade CI/SAST/DAST/mutation gates live in `hardening` → CI/Test Security; this skill governs how tests themselves are written.
-
-## Map — jump to the section when…
-
-| Section | Load when |
-|---|---|
-| Recommended stack · Project layout & naming | new test project; naming, folders |
-| Asserting on monads · Unit tests · Test data — Bogus builders | `Result<T>`/`Option<T>` asserts, AAA, builders |
-| Integration tests — Testcontainers | Postgres/Redis/Kafka fixtures, `WebApplicationFactory`, concurrency tests |
-| Testing middleware & Activity/baggage · Auth integration tests | `Activity.Current`, JWT test tokens, 401/403 matrix |
-| Architecture tests (DDD boundaries) · Coverage / CI | layer rules, coverage/mutation gates |
-| LLM & security tests · Anti-patterns (forbidden) · Related skills | prompt-injection tests; what never to do |
-
-Sibling skills: `dotnet:csharp` · `dotnet:ddd` · `dotnet:web-api` · `dotnet:validation` · `dotnet:hardening` · `dotnet:observability`. See **Related skills** at the end.
 
 ## Recommended stack (new projects; match the existing one otherwise)
 

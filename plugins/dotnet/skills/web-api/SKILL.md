@@ -1,13 +1,30 @@
 ---
 name: web-api
-description: Use when writing or editing ASP.NET Core endpoints, handlers, controllers, mediator commands/queries, or validators, or when wiring/reordering middleware in `Program.cs`. Defers input-size/length limits to `validation`, security/ops to `hardening`, and module placement to `ddd`.
+description: Shapes ASP.NET Core endpoints and middleware. Use when writing or editing endpoints, handlers, controllers, mediator commands/queries, or validators, or when wiring/reordering middleware in `Program.cs`. Defers input-size/length limits to `validation`, security/ops to `hardening`, and module placement to `ddd`.
 ---
 
 # ASP.NET Core Web API
 
-Owns **how requests are shaped and handled** — the endpoint/handler/slice surface, the vertical-slice file skeleton (`static class <Name>Command` holding Endpoint/Request/Validator/Handler/Response), FastEndpoints/Minimal API/mediator handler wiring, FluentValidation basics, the pagination request base, and `Program.cs` middleware pipeline ordering. *Where* a slice sits in the module tree comes from `ddd`; record/monad idioms come from `csharp`; hard input limits come from `validation`.
+## Contents
 
-**Sections:** Vertical slice file · FluentValidation · Pagination · Strongly-typed id binding · Middleware pipeline order & registration safety (Canonical order; Fail fast on a missing prerequisite) · Related skills.
+- Vertical slice file → `../csharp/references/monads.md`, `../csharp/references/mediator.md`, `dotnet:ddd`, `dotnet:hardening`
+- FluentValidation → `dotnet:validation`
+- Pagination → `dotnet:validation`
+- Strongly-typed id binding
+- Middleware pipeline order & registration safety
+- Related skills → `dotnet:csharp`, `dotnet:ddd`, `dotnet:validation`, `dotnet:hardening`, `dotnet:testing`
+
+## Files
+
+- `../csharp/references/monads.md` — Monadic error handling — library selection & usage
+- `../csharp/references/mediator.md` — Mediator selection & licensing (single source of truth)
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:testing` (`../testing/SKILL.md`) — C# Testing Standard
+
+Owns **how requests are shaped and handled** — the endpoint/handler/slice surface, the vertical-slice file skeleton (`static class <Name>Command` holding Endpoint/Request/Validator/Handler/Response), FastEndpoints/Minimal API/mediator handler wiring, FluentValidation basics, the pagination request base, and `Program.cs` middleware pipeline ordering. *Where* a slice sits in the module tree comes from `ddd`; record/monad idioms come from `csharp`; hard input limits come from `validation`.
 
 ## Vertical slice file
 

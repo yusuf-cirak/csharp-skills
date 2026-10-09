@@ -1,13 +1,35 @@
 ---
 name: ddd
-description: Use when modeling a .NET domain, adding or changing an aggregate/entity/domain-event, scaffolding a new module or feature, or deciding project/layer layout. Request validation and JSON config live in `validation`; endpoint wiring in `web-api`.
+description: Guides .NET domain modeling and solution layout. Use when modeling a domain, adding or changing an aggregate/entity/domain-event, scaffolding a new module or feature, or deciding project/layer layout. Request validation and JSON config live in `validation`; endpoint wiring in `web-api`.
 ---
 
 # .NET Domain-Driven Design & Architecture
 
-Owns **where domain logic lives** and how the solution is structured: DDD tactical patterns (business logic in domain models, domain services, domain events, private-constructor + static-factory aggregates, value objects for primitives, discriminated unions for variants), the Modular Monolith layout (`BuildingBlocks/*`, `Modules/<Name>/{Application,Contracts,Domain,Infrastructure}`, `Presentation/*.Host`), and Vertical-Slice module structure. Record/value-object/discriminated-union *language patterns* come from `csharp`; this skill governs domain modeling and module layout. Apply alongside `csharp`.
+## Contents
 
-**Sections:** Domain Driven Design · Modular Monolith Architecture · Vertical Slice Architecture (inside Application) · Strongly-typed IDs · Persisting domain types (EF Core) · Domain-event dispatch (concrete) · Placement & naming of reusable capabilities · Related skills.
+- Domain Driven Design → `../csharp/references/monads.md`, `../csharp/references/value-object-base.md`, `../csharp/references/strongly-typed-ids-and-value-objects.md`, `../csharp/references/state-as-types.md`
+- Modular Monolith Architecture
+- Vertical Slice Architecture (inside Application) → `dotnet:web-api`
+- Strongly-typed IDs → `../csharp/references/strongly-typed-ids-and-value-objects.md`
+- Persisting domain types (EF Core) → `../csharp/references/ef-core-data-access.md`
+- Domain-event dispatch (concrete) → `dotnet:hardening`, `dotnet:csharp`
+- Placement & naming of reusable capabilities
+- Related skills → `dotnet:csharp`, `dotnet:web-api`, `dotnet:validation`, `dotnet:hardening`, `dotnet:testing`
+
+## Files
+
+- `../csharp/references/monads.md` — Monadic error handling — library selection & usage
+- `../csharp/references/value-object-base.md` — Value Object base type + converters
+- `../csharp/references/strongly-typed-ids-and-value-objects.md` — Strongly-typed IDs & value objects (Vogen)
+- `../csharp/references/state-as-types.md` — State as types — polymorphic state machines (no boolean flags)
+- `../csharp/references/ef-core-data-access.md` — EF Core data access — performance & value-object persistence (single source of truth)
+- `dotnet:web-api` (`../web-api/SKILL.md`) — ASP.NET Core Web API
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
+- `dotnet:testing` (`../testing/SKILL.md`) — C# Testing Standard
+
+Owns **where domain logic lives** and how the solution is structured: DDD tactical patterns (business logic in domain models, domain services, domain events, private-constructor + static-factory aggregates, value objects for primitives, discriminated unions for variants), the Modular Monolith layout (`BuildingBlocks/*`, `Modules/<Name>/{Application,Contracts,Domain,Infrastructure}`, `Presentation/*.Host`), and Vertical-Slice module structure. Record/value-object/discriminated-union *language patterns* come from `csharp`; this skill governs domain modeling and module layout. Apply alongside `csharp`.
 
 ## Domain Driven Design
 

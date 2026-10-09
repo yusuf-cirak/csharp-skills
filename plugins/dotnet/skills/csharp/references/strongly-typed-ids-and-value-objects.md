@@ -1,7 +1,15 @@
 # Strongly-typed IDs & value objects (Vogen)
 
+## Contents
+
+- EF converter registration
+- JSON, routing, packaging
+- `[ValueObject<string>]` VOs (IpAddress, PhoneNumber)
+- Validation model
+- Related
+
 > Vogen 8, net10, EF Core 10. The source generator owns equality/validation/converter boilerplate.
-> Used by `ddd` (entity ids, domain VOs) and `csharp` (VO language patterns).
+> Used by `dotnet:ddd` (entity ids, domain VOs) and `dotnet:csharp` (VO language patterns).
 
 ```csharp
 [ValueObject<Guid>(conversions: Conversions.EfCoreValueConverter | Conversions.SystemTextJson)]
@@ -55,3 +63,8 @@ public readonly partial struct PhoneNumber {
 ## Validation model
 
 Vogen's `From` THROWS `ValueObjectValidationException` on invalid; `TryFrom` returns Vogen's `ValueObjectOrError<T>` — NOT a `Result<T>`. If the codebase standardizes on `Result`, adapt at the boundary.
+
+## Related
+
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style

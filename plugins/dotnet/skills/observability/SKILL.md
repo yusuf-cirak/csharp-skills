@@ -1,27 +1,33 @@
 ---
 name: observability
-description: Use when instrumenting a .NET/ASP.NET Core service, wiring telemetry in `Program.cs`, configuring OpenTelemetry exporters/processors/sampling, adding metrics, or setting up health checks/probes. Vendor-neutral (OTLP + any collector).
+description: Instruments .NET/ASP.NET Core services with vendor-neutral OpenTelemetry (OTLP + any collector). Use when wiring telemetry in `Program.cs`, configuring exporters/processors/sampling, adding traces, metrics or logs, or setting up health checks/probes.
 ---
 
 # Observability (OpenTelemetry-native, FAANG-level)
+
+## Contents
+
+- Pillars & setup → `dotnet:csharp`
+- Traces
+- Metrics (System.Diagnostics.Metrics)
+- Logs (OTel-native) → `dotnet:hardening`
+- Correlation & context → `dotnet:hardening`
+- Health checks & probes (Kubernetes model)
+- SLO & alerting
+- Gotchas (hard-won)
+- Related skills → `dotnet:hardening`, `dotnet:csharp`, `dotnet:testing`
+
+## Files
+
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:testing` (`../testing/SKILL.md`) — C# Testing Standard
 
 Telemetry is **OpenTelemetry-native and OTLP-first**: traces (`ActivitySource` per module, `ParentBased` ratio sampling, W3C propagation incl. across messaging), metrics (`System.Diagnostics.Metrics` Meter API, RED + USE, low-cardinality tags, exemplars), and logs (`ILogger` → OpenTelemetry, source-generated `[LoggerMessage]` by default, snake_case templates, key/mask/baggage enrichment, tail sampling) share one `Resource` and one exporter, correlated by trace context with no enricher glue — plus correlation_id/baggage context, Kubernetes health probes with drain-on-shutdown, and SLOs with multi-window burn-rate alerts. These are non-negotiable defaults for any service; deviations need a written justification on the PR.
 
 **Logging stance:** prefer OTel-native (`ILogger → AddOpenTelemetry`) for new services. Reach for Serilog **only** when OTel-native is not possible (a sink/format the OTLP pipeline can't provide). Don't run both.
 
 **Vendor neutrality:** export OTLP and point it at *any* collector. SigNoz / Jaeger / Tempo / Grafana / Prometheus is an org/deploy choice, never baked into code. Override the endpoint with the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (gRPC `:4317`).
-
-## Map — jump to the section when…
-
-| Section | Load when |
-|---|---|
-| Pillars & setup | `AddOpenTelemetry`, `Resource`, exporters |
-| Traces · Metrics (System.Diagnostics.Metrics) · Logs (OTel-native) · Source-generated logging (`[LoggerMessage]`, .NET 6+) — the default | `ActivitySource`, `Meter`, `ILogger`, `[LoggerMessage]`, processors, sampling |
-| Correlation & context | `correlation_id`, baggage, message propagation |
-| Health checks & probes (Kubernetes model) · SLO & alerting | liveness/readiness, burn-rate alerts |
-| Gotchas (hard-won) · Related skills | before finishing any telemetry change |
-
-Sibling skills: `dotnet:hardening` (log redaction, headers) · `dotnet:csharp` · `dotnet:testing`. See **Related skills** at the end.
 
 ## Pillars & setup
 

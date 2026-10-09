@@ -1,13 +1,48 @@
 ---
 name: csharp
-description: C# house style. Use before writing, editing, or reviewing any C#/.NET code (`.cs`, `.csproj`, `.slnx`, `Directory.Packages.props`) and for questions about C# idioms or the coding standards. Entry point to the ddd, web-api, validation, hardening, observability, and testing skills.
+description: Applies the C# house style and routes to the sibling skills. Use before writing, editing, or reviewing any C#/.NET code (`.cs`, `.csproj`, `.slnx`, `Directory.Packages.props`) and for questions about C# idioms or the coding standards. Entry point to the ddd, web-api, validation, hardening, observability, and testing skills.
 ---
 
 # C# House Style
 
-Permanent C# rules for this codebase. Every `.cs` edit follows the core below; branch topics sit one pointer away in `references/`; sibling skills own their own surface. When a framework or language version blocks a rule, write the closest equivalent and say why.
+## Contents
 
-**Sections:** Route first · Namespaces & file organization · Naming & layout (Microsoft framework style) · Immutability & records · Discriminated unions · State as types · Value objects · Errors · Modern C# · Time · Constants · References — load when · Decision notes.
+- Route first → `dotnet:ddd`, `dotnet:web-api`, `dotnet:validation`, `dotnet:hardening`, `dotnet:observability`, `dotnet:testing`
+- Namespaces & file organization
+- Naming & layout (Microsoft framework style)
+- Immutability & records
+- Discriminated unions
+- State as types → `references/state-as-types.md`
+- Value objects → `references/value-object-base.md`, `dotnet:validation`
+- Errors → `references/monads.md`
+- Modern C#
+- Time → `dotnet:testing`
+- Constants → `dotnet:validation`
+- References — load when → `references/linq.md`, `references/performance.md`, `references/async-concurrency.md`, `references/composition.md`, `references/state-as-types.md`, `references/value-object-base.md`, `references/monads.md`, `references/ef-core-data-access.md`, `references/mediator.md`, `references/resilience.md`, `references/caching.md`, `references/input-limits.md`
+- Decision notes
+
+## Files
+
+- `references/state-as-types.md` — State as types — polymorphic state machines (no boolean flags)
+- `references/value-object-base.md` — Value Object base type + converters
+- `references/monads.md` — Monadic error handling — library selection & usage
+- `references/linq.md` — C# LINQ
+- `references/performance.md` — C# Performance
+- `references/async-concurrency.md` — C# Async, Concurrency & Background Work
+- `references/composition.md` — C# Composition: Options, Extensions, DI, Library Surface
+- `references/ef-core-data-access.md` — EF Core data access — performance & value-object persistence (single source of truth)
+- `references/mediator.md` — Mediator selection & licensing (single source of truth)
+- `references/resilience.md` — Resilience pipelines (single source of truth)
+- `references/caching.md` — Application caching — hybrid L1/L2 (shared reference)
+- `references/input-limits.md` — InputLimits constants
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture
+- `dotnet:web-api` (`../web-api/SKILL.md`) — ASP.NET Core Web API
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:observability` (`../observability/SKILL.md`) — Observability (OpenTelemetry-native, FAANG-level)
+- `dotnet:testing` (`../testing/SKILL.md`) — C# Testing Standard
+
+Permanent C# rules for this codebase. Every `.cs` edit follows the core below; branch topics sit one pointer away in `references/`; sibling skills own their own surface. When a framework or language version blocks a rule, write the closest equivalent and say why.
 
 ## Route first
 

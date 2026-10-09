@@ -1,8 +1,12 @@
 # InputLimits constants
 
+## Contents
+
+- Related
+
 Single shared static class for all length / size / count limits. Place in `BuildingBlocks.Domain` or the project's equivalent shared layer. Validators, value objects, endpoints, and Kestrel config reference these — never inline magic numbers.
 
-Used by `validation` (the canonical owner) and referenced from `hardening` (upload size, etc.).
+Used by `dotnet:validation` (the canonical owner) and referenced from `dotnet:hardening` (upload size, etc.).
 
 ```csharp
 public static class InputLimits
@@ -18,3 +22,8 @@ public static class InputLimits
     public const int MaxPageSize = 200;
 }
 ```
+
+## Related
+
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)

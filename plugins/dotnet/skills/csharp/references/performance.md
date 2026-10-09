@@ -1,5 +1,10 @@
 # C# Performance
 
+## Contents
+
+- JSON serialization — source generation & AOT (.NET 6+; AOT .NET 8+)
+- Related
+
 Load when touching a per-request, per-record, or per-message path; building strings; pooling streams or collections; or configuring JSON source generation / Native AOT.
 
 - Prefer `Span<T>` / `ReadOnlySpan<T>` over `string` / `ReadOnlyMemory<T>` when possible.
@@ -108,7 +113,12 @@ On per-request / per-record / per-message paths (middleware, log/OTel processors
 public sealed partial class AppJsonContext : JsonSerializerContext;
 ```
 
-- **Wiring is owned by `validation`** (§4 Global `JsonSerializerOptions` hardening) — feed the context
+- **Wiring is owned by `dotnet:validation`** (§4 Global `JsonSerializerOptions` hardening) — feed the context
   to the hardened options' resolver chain there; do **not** configure `ConfigureHttpJsonOptions` here.
 - For a Native-AOT service set `<PublishAot>true</PublishAot>`; prefer Minimal API + `TypedResults` and
   avoid reflection-based serializers/mappers.
+
+## Related
+
+- `linq.md` — C# LINQ
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits

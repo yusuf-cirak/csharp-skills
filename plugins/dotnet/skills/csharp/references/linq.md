@@ -1,5 +1,10 @@
 # C# LINQ
 
+## Contents
+
+- LINQ — common runtime pitfalls
+- Related
+
 Load when aggregating, projecting, joining, or correlating collections, or when choosing between LINQ and a loop.
 
 - When aggregating, projecting, flattening, joining, or correlating collections, prefer LINQ over a `foreach` + manual accumulator.
@@ -158,3 +163,8 @@ these before reaching for `Single`/`ToDictionary`/`Join`/`Zip`:
 - **`==`/`.Equals()` on two sequences compares references, not contents** — two logically identical
   `List<T>`s (or any two `IEnumerable<T>`) compare unequal. Use `SequenceEqual()` for element-wise
   comparison (and `SetEquals`/order-insensitive comparison explicitly when order shouldn't matter).
+
+## Related
+
+- `ef-core-data-access.md` — EF Core data access — performance & value-object persistence (single source of truth)
+- `performance.md` — C# Performance

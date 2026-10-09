@@ -1,29 +1,50 @@
 ---
 name: hardening
-description: Use when hardening a .NET/ASP.NET Core service exposed to untrusted or multi-tenant traffic, doing a security review, configuring middleware/`Program.cs`, or deploying. DTO-level input size/length limits belong to `validation`.
+description: Hardens ASP.NET Core services exposed to untrusted or multi-tenant traffic. Use when hardening a service, doing a security review, configuring middleware/`Program.cs`, or deploying. DTO-level input size/length limits belong to `validation`.
 ---
 
 # Production Hardening (FAANG-level)
 
+## Contents
+
+- Tiered Rate Limiting & Burst Protection
+- Idempotency
+- AuthN / AuthZ
+- Security Headers + CORS
+- Forwarded Headers / Real Client IP
+- Cryptography
+- Error Handling → `dotnet:validation`
+- Structured Logging & Audit → `dotnet:observability`
+- EF Core Hardening
+- File Upload → `dotnet:validation`
+- SSRF Defense
+- Resilience (outbound calls) → `../csharp/references/resilience.md`
+- XML / Deserialization Safety
+- Transport (compression & decompression)
+- HTTP Caching
+- Application Caching (hybrid L1/L2) → `../csharp/references/caching.md`
+- Multi-Tenancy
+- Background Jobs & Messaging → `dotnet:csharp`
+- Dependency & Supply Chain
+- Observability → `dotnet:observability`
+- API Versioning & Lifecycle
+- Cancellation & Timeouts → `dotnet:observability`
+- CI / Test Security
+- LLM / Prompt-Injection Hardening
+- Related skills → `dotnet:observability`, `dotnet:validation`, `dotnet:web-api`, `dotnet:ddd`, `dotnet:csharp`, `dotnet:testing`
+
+## Files
+
+- `../csharp/references/resilience.md` — Resilience pipelines (single source of truth)
+- `../csharp/references/caching.md` — Application caching — hybrid L1/L2 (shared reference)
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
+- `dotnet:observability` (`../observability/SKILL.md`) — Observability (OpenTelemetry-native, FAANG-level)
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:web-api` (`../web-api/SKILL.md`) — ASP.NET Core Web API
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture
+- `dotnet:testing` (`../testing/SKILL.md`) — C# Testing Standard
+
 These rules apply to any service exposed to untrusted networks or multi-tenant traffic: tiered/distributed rate limiting & burst protection, idempotency keys & webhook HMAC, authn/authz (short-lived tokens, refresh rotation + reuse detection, resource-level checks, tenant-from-claim), security headers & CORS, cryptography, `ProblemDetails` error handling, structured logging & audit, EF Core hardening, secure file upload, SSRF defense, deserialization safety, HTTP/application caching, multi-tenancy isolation, background jobs/outbox, supply-chain security, and API versioning/lifecycle. They are non-negotiable defaults; deviations need a written justification on the PR. DTO/serialization input limits are owned by `validation`; this skill covers the network/runtime/ops hardening surface.
-
-## Map — jump to the section when…
-
-| Section | Load when |
-|---|---|
-| Tiered Rate Limiting & Burst Protection | `AddRateLimiter`, partition keys, Redis/distributed limiter, 429 shape |
-| Idempotency | `Idempotency-Key`, retried POSTs, webhook HMAC/replay |
-| AuthN / AuthZ | JWT bearer, refresh rotation, policies, tenant-from-claim, 401/403 |
-| Security Headers + CORS · Forwarded Headers / Real Client IP | `UseCors`, CSP/HSTS, proxies, client IP |
-| Cryptography · Error Handling · Structured Logging & Audit | secrets, hashing, `ProblemDetails`, redaction, audit trail |
-| EF Core Hardening · File Upload · SSRF Defense · XML / Deserialization Safety | raw SQL, uploads, outbound URLs, XML/JSON parsing |
-| Resilience (outbound calls) · Transport (compression & decompression) · HTTP Caching · Application Caching (hybrid L1/L2) | outbound calls, compression, `Cache-Control`, hybrid cache |
-| Multi-Tenancy · Background Jobs & Messaging | tenant isolation, outbox, consumers |
-| Dependency & Supply Chain · CI / Test Security | NuGet audit, lock files, CI gates |
-| Observability · API Versioning & Lifecycle · Cancellation & Timeouts | log redaction link-out, deprecation, timeouts |
-| LLM / Prompt-Injection Hardening · Related skills | untrusted text reaching a model or prompt |
-
-Sibling skills: `dotnet:validation` (DTO limits) · `dotnet:observability` (telemetry) · `dotnet:web-api` (middleware order) · `dotnet:testing` · `dotnet:ddd` · `dotnet:csharp`. See **Related skills** at the end.
 
 ## Tiered Rate Limiting & Burst Protection
 

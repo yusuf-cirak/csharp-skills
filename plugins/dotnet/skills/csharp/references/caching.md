@@ -1,6 +1,13 @@
 # Application caching — hybrid L1/L2 (shared reference)
 
-Linked from `hardening` (Application Caching) and `csharp` (keyed DI cache stores). Owns *how* an
+## Contents
+
+- Library pick
+- Rules
+- Sketch
+- Related
+
+Linked from `dotnet:hardening` (Application Caching) and `dotnet:csharp` (keyed DI cache stores). Owns *how* an
 in-process cache layer is built. Don't hand-roll a cache, and don't run a bare `IMemoryCache` or
 `IDistributedCache` directly — neither gives you stampede protection, fail-safe, or cross-node
 invalidation, and you'll re-implement all three badly.
@@ -35,7 +42,7 @@ For a new setup, two good options:
 - **Jitter** expiry (a few % / a few seconds) so keys written together don't all expire on the same tick
   and stampede the backing store at once.
 - **Never cache** authenticated/per-user responses in a shared L2 under a non-user-scoped key, secrets, or
-  anything the `hardening` redaction policy forbids logging. Scope the key by tenant/user where the value
+  anything the `dotnet:hardening` redaction policy forbids logging. Scope the key by tenant/user where the value
   is principal-specific.
 
 ## Sketch
@@ -57,3 +64,8 @@ services.AddFusionCache()
 var product = await cache.GetOrSetAsync(
     $"product:{id}", _ => repo.LoadAsync(id, ct), token: ct);  // misses collapse to one factory call
 ```
+
+## Related
+
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style

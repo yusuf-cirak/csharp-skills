@@ -1,7 +1,17 @@
 # State as types — polymorphic state machines (no boolean flags)
 
-Shared worked example for the **state-as-types** pattern. Used by `csharp` (the language pattern) and
-`ddd` (aggregate/entity state machines). The goal is to **make illegal states unrepresentable**.
+## Contents
+
+- 1. State payload — discriminated union + capability interfaces
+- 2. Transitions via pattern matching (extension members, no if-else)
+- 3. Construction-time invariant guard
+- 4. Entity as polymorphic state
+- 5. Persistence
+- 6. When to reach for this — and when not
+- Related
+
+Shared worked example for the **state-as-types** pattern. Used by `dotnet:csharp` (the language pattern) and
+`dotnet:ddd` (aggregate/entity state machines). The goal is to **make illegal states unrepresentable**.
 
 Boolean flags (`bool IsApproved`) and status enums guarded by `if`-`else` scatter invariants across
 call sites and permit combinations that should never exist (`IsExecuted && !IsApproved`). Instead:
@@ -307,3 +317,8 @@ default type name.
 - **Don't over-apply** to a 2-state toggle with no behavioral difference between states — a `bool` (or
   a single nullable timestamp like `CompletedAt`) is clearer there. The pattern pays off once illegal
   combinations or state-specific operations exist.
+
+## Related
+
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture

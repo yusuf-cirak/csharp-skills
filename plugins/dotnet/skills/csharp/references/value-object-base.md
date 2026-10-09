@@ -1,6 +1,14 @@
 # Value Object base type + converters
 
-Shared base for all value objects. Used by `csharp` (VO pattern), `ddd` (domain VOs), and `validation` (length-typed `Text` VOs).
+## Contents
+
+- Base type
+- Example `Text`
+- Value Object JSON
+- Value Object EF Core
+- Related
+
+Shared base for all value objects. Used by `dotnet:csharp` (VO pattern), `dotnet:ddd` (domain VOs), and `dotnet:validation` (length-typed `Text` VOs).
 
 ## Base type
 
@@ -79,3 +87,9 @@ public DbContext ApplyDefaultConventions(ModelConfigurationBuilder configuration
     return dbContext;
 }
 ```
+
+## Related
+
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits

@@ -1,6 +1,14 @@
 # Mediator selection & licensing (single source of truth)
 
-> Requires .NET 8+. Owns the **which-mediator** decision for `web-api` and `validation`.
+## Contents
+
+- Decision rule
+- API parity (why the swap is cheap)
+- Object mapping — no reflection mappers
+- Unified alternative — Wolverine
+- Related
+
+> Requires .NET 8+. Owns the **which-mediator** decision for `dotnet:web-api` and `dotnet:validation`.
 
 MediatR, AutoMapper, and MassTransit moved to **commercial/paid licensing** (MediatR v13+,
 AutoMapper v15+, MassTransit v9+, during 2024–2025; free only under a revenue threshold). The skills
@@ -19,8 +27,8 @@ no longer assume MediatR is free. Pick the mediator **before scaffolding a handl
 
 ## API parity (why the swap is cheap)
 
-The handler/behavior contracts are the same shape, so the slice skeleton (`web-api`) and
-`ValidationBehavior<,>` (`validation`) are reused verbatim:
+The handler/behavior contracts are the same shape, so the slice skeleton (`dotnet:web-api`) and
+`ValidationBehavior<,>` (`dotnet:validation`) are reused verbatim:
 
 ```csharp
 public sealed record CreateActivity(...) : IRequest<Result<ActivityId>>;
@@ -59,3 +67,8 @@ For greenfield services that want **mediator + messaging + outbox in one** free 
 source-gen) package, **JasperFx/Wolverine** replaces MediatR **and** MassTransit. Handlers are plain
 methods; `IMessageBus.PublishAsync` carries the durable outbox. Consider it when the licensing of both
 MediatR and MassTransit is in play; otherwise the `Mediator` + existing outbox guidance is sufficient.
+
+## Related
+
+- `dotnet:web-api` (`../web-api/SKILL.md`) — ASP.NET Core Web API
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits

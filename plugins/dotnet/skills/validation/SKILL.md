@@ -1,23 +1,37 @@
 ---
 name: validation
-description: Use when defining or reviewing ASP.NET Core request DTOs/commands/queries, request validators, JSON/serialization config, or any code that accepts client input. Rate limiting, authn, and other network hardening live in `hardening`.
+description: Enforces input limits and JSON/serialization hardening for ASP.NET Core. Use when defining or reviewing request DTOs/commands/queries, request validators, JSON/serialization config, or any code that accepts client input. Rate limiting, authn, and other network hardening live in `hardening`.
 ---
 
 # ASP.NET Core Input Security & Serialization Limits
 
+## Contents
+
+- 1. Central `InputLimits` constants → `../csharp/references/input-limits.md`
+- 2. Length-typed `Text` value objects → `../csharp/references/monads.md`, `../csharp/references/value-object-base.md`
+- 3. FluentValidation — mandatory rules
+- 3b. Validators run in the pipeline (mediator pipeline behavior) → `../csharp/references/mediator.md`, `dotnet:hardening`
+- 4. Global `JsonSerializerOptions` hardening → `dotnet:csharp`
+- 5. Kestrel & FormOptions limits
+- 6. Per-endpoint override (opt-in only)
+- 7. Pagination is mandatory
+- 8. Rate limiting → `dotnet:hardening`
+- 9. Anti-patterns (forbidden)
+- 10. Output encoding
+- Related skills → `dotnet:csharp`, `dotnet:web-api`, `dotnet:hardening`, `dotnet:testing`
+
+## Files
+
+- `../csharp/references/input-limits.md` — InputLimits constants
+- `../csharp/references/monads.md` — Monadic error handling — library selection & usage
+- `../csharp/references/value-object-base.md` — Value Object base type + converters
+- `../csharp/references/mediator.md` — Mediator selection & licensing (single source of truth)
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:web-api` (`../web-api/SKILL.md`) — ASP.NET Core Web API
+- `dotnet:testing` (`../testing/SKILL.md`) — C# Testing Standard
+
 Every endpoint, DTO, validator, value object, and JSON configuration MUST enforce hard limits on input size, depth, and shape: the central `InputLimits` constants, length-typed `Text` value objects (`ShortText`/`MediumText`/`LongText`/`XLongText`, `Email`/`Slug`/`Url`/`PhoneNumber`) instead of raw `string`, mandatory FluentValidation rules, global `JsonSerializerOptions` hardening, Kestrel/`FormOptions` limits, per-endpoint size override, mandatory pagination, and output encoding. Never trust client input. Apply these rules by default — only relax them with an explicit, justified opt-in. Pairs with `web-api` (endpoint shape) and `csharp` (VO/record idioms).
-
-## Map — jump to the section when…
-
-| Section | Load when |
-|---|---|
-| 1. Central `InputLimits` constants · 2. Length-typed `Text` value objects | any string/collection property on a DTO |
-| 3. FluentValidation — mandatory rules · 3b. Validators run in the pipeline (mediator pipeline behavior) | writing or reviewing a validator |
-| 4. Global `JsonSerializerOptions` hardening · 5. Kestrel & FormOptions limits · 6. Per-endpoint override (opt-in only) | body/depth/form size limits |
-| 7. Pagination is mandatory · 8. Rate limiting · 10. Output encoding | list endpoints; HTML/JS output |
-| 9. Anti-patterns (forbidden) · Related skills | final review checklist |
-
-Constants class source: `../csharp/references/input-limits.md`. Sibling skills: `dotnet:web-api` · `dotnet:hardening` · `dotnet:csharp` · `dotnet:testing`. See **Related skills** at the end.
 
 ## 1. Central `InputLimits` constants
 

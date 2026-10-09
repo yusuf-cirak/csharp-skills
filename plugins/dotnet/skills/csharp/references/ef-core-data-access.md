@@ -1,6 +1,16 @@
 # EF Core data access — performance & value-object persistence (single source of truth)
 
-> EF Core. Version tags inline. Security/hardening rules for EF live in `hardening` → EF Core
+## Contents
+
+- Bulk operations (EF 7+)
+- N+1 — the other half of the cartesian-explosion coin
+- Query performance
+- Query shaping — selective, fan-out-free, composed
+- Value-object & strongly-typed-id persistence
+- Keyset paging, transactions & bulk backfills
+- Related
+
+> EF Core. Version tags inline. Security/hardening rules for EF live in `dotnet:hardening` → EF Core
 > Hardening; this ref owns **performance** and **domain-type persistence**.
 
 ## Bulk operations (EF 7+)
@@ -17,7 +27,7 @@ await ctx.Sessions.Where(s => s.ExpiresAt < now).ExecuteDeleteAsync(ct);
 ```
 
 **Caveat:** bulk ops bypass the change tracker, so `SaveChanges` interceptors don't run and **domain
-events don't fire** — the rule and rationale live in `ddd` → Domain-event dispatch. Maintenance/bulk
+events don't fire** — the rule and rationale live in `dotnet:ddd` → Domain-event dispatch. Maintenance/bulk
 paths only.
 
 ## N+1 — the other half of the cartesian-explosion coin
@@ -62,7 +72,7 @@ LINQ — neither throws, neither shows up in review unless you're looking at the
   category at `Information` and watch for a statement count that scales with the row count — that's the
   N+1 smell. A snapshot/integration test asserting the SQL-statement count for a known endpoint (count
   `DbCommand` executions via an interceptor, or assert on a captured log) catches a regression before it
-  ships, the same way `hardening`'s header/429-envelope snapshot tests catch a contract regression.
+  ships, the same way `dotnet:hardening`'s header/429-envelope snapshot tests catch a contract regression.
 
 ## Query performance
 
@@ -77,7 +87,7 @@ LINQ — neither throws, neither shows up in review unless you're looking at the
 - **`AsSplitQuery()`** (EF 5+) — on any query with **multiple collection `Include`s**, to avoid
   cartesian explosion (one row per child × child blows up the result set).
 - **`AsNoTrackingWithIdentityResolution()`** (EF 5+) — read graphs without tracking but still
-  de-duplicating shared references. Default reads stay `AsNoTracking` (see `hardening`).
+  de-duplicating shared references. Default reads stay `AsNoTracking` (see `dotnet:hardening`).
 - **Compiled models** (EF 6+) — `dotnet ef dbcontext optimize` for large schemas / fast cold start;
   wire with `optionsBuilder.UseModel(MyModels.Instance)`.
 
@@ -130,7 +140,7 @@ SQL Server. Learned rules, most impactful first:
   modelBuilder.Entity<Order>().Property(o => o.Id)
       .HasConversion(id => id.Value, value => OrderIdFactory.Create(value).Value);
   ```
-  Vogen-generated IDs (see `ddd`) ship an EF converter — register it via
+  Vogen-generated IDs (see `dotnet:ddd`) ship an EF converter — register it via
   `HasConversion<OrderId.EfCoreValueConverter>()`. Pair with the JSON converter list in
   `value-object-base.md` so the same VO round-trips over HTTP and the DB.
 
@@ -152,3 +162,9 @@ SQL Server. Learned rules, most impactful first:
   then rebuild the key + indexes once at the end. Guard each DDL step so it is idempotent (`DROP … IF EXISTS`,
   create only when missing). Only drop the primary key when the load needs no per-row uniqueness check
   (disjoint ranges / dup-free resume) — otherwise duplicates surface at the final key rebuild.
+
+## Related
+
+- `value-object-base.md` — Value Object base type + converters
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture

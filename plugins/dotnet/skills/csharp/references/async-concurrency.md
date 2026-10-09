@@ -1,5 +1,11 @@
 # C# Async, Concurrency & Background Work
 
+## Contents
+
+- Concurrency primitives
+- Background work & channels (.NET 8+)
+- Related
+
 Load when writing async library code, fan-out, locks/gating, streams, channels, or hosted services.
 
 Library/framework code runs under callers we don't control — follow the dotnet/runtime + EF Core rules:
@@ -30,7 +36,7 @@ public async IAsyncEnumerable<IReadOnlyList<Row>> StreamAsync(
 
 - In-process producer/consumer → **`System.Threading.Channels`** (`Channel.CreateBounded<T>` for
   backpressure), drained by a `BackgroundService`. No external broker for purely internal hand-offs —
-  for **distributed/broker reliability** (retry, DLQ, outbox) see `hardening` → Background Jobs & Messaging.
+  for **distributed/broker reliability** (retry, DLQ, outbox) see `dotnet:hardening` → Background Jobs & Messaging.
 - Use **`IHostedLifecycleService`** (.NET 8) when you need ordered `Starting/Started/Stopping/Stopped`
   hooks rather than ad-hoc startup code.
 
@@ -45,3 +51,7 @@ public sealed class WorkQueue : BackgroundService
     }
 }
 ```
+
+## Related
+
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)

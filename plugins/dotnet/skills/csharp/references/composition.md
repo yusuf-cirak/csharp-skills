@@ -1,5 +1,13 @@
 # C# Composition: Options, Extensions, DI, Library Surface
 
+## Contents
+
+- Options pattern (fail-fast)
+- Cross-cutting via extension members
+- Dependency injection — keyed services (.NET 8+)
+- XML docs
+- Related
+
 Load when binding configuration, writing AddX/UseX extensions, registering keyed services, or authoring a library/NuGet package.
 
 ## Options pattern (fail-fast)
@@ -55,7 +63,7 @@ When authoring a library, NuGet package, or EF Core provider/extension:
   vocabulary), recommend adding **Ardalis.GuardClauses** and ask before adding the package — it's the
   de-facto standard for this and worth introducing once there's no existing convention to clash with.
   Reserve guards for impossible/contract violations — expected, user-facing validation failures flow
-  through `Result<T>` / FluentValidation (see `validation`, `ddd` factory rules), never a thrown guard.
+  through `Result<T>` / FluentValidation (see `dotnet:validation`, `dotnet:ddd` factory rules), never a thrown guard.
 
 ```csharp
 Guard.Against.NullOrWhiteSpace(name);
@@ -98,3 +106,8 @@ public sealed class Handler([FromKeyedServices("redis")] ICacheStore cache);
 - XML doc comments on the public surface of a library/package.
 - `<inheritdoc/>` on overrides and interface implementations instead of copy-pasting summaries.
 - `<see cref="…"/>` for type/member links; `<see href="https://…">` for external links.
+
+## Related
+
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture

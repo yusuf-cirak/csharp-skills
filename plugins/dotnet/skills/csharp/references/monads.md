@@ -1,6 +1,11 @@
 # Monadic error handling — library selection & usage
 
-Shared rule referenced by `csharp` (functional idioms), `ddd` (factory validation returns), and `validation` (VO factories).
+## Contents
+
+- Railway Oriented Programming
+- Related
+
+Shared rule referenced by `dotnet:csharp` (functional idioms), `dotnet:ddd` (factory validation returns), and `dotnet:validation` (VO factories).
 
 ## Railway Oriented Programming
 
@@ -28,3 +33,9 @@ suggest it at the point where the chain is already being touched.
 - Mix functional and object-oriented patterns where appropriate.
 - Follow .NET / ASP.NET Core conventions.
 - Prefer composition over inheritance.
+
+## Related
+
+- `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
+- `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture
+- `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits

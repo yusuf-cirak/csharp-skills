@@ -1,7 +1,14 @@
 # Resilience pipelines (single source of truth)
 
+## Contents
+
+- Default — standard handler
+- Custom pipeline — strategy ordering
+- Rules
+- Related
+
 > Requires .NET 8+ and Polly v8 (`Microsoft.Extensions.Http.Resilience` / `Polly.Core`). Owned by
-> `hardening`; every outbound `HttpClient` uses one.
+> `dotnet:hardening`; every outbound `HttpClient` uses one.
 
 Polly v8 replaced the legacy `Policy` API with **`ResiliencePipeline`**. `Microsoft.Extensions.Http.Resilience`
 ships a batteries-included handler. Do not hand-roll retries/timeouts on `HttpClient`.
@@ -37,12 +44,17 @@ new ResiliencePipelineBuilder<HttpResponseMessage>()
 ## Rules
 
 - **Retry only idempotent operations.** A non-idempotent POST without an `Idempotency-Key`
-  (see `hardening` → Idempotency) must not be auto-retried.
-- The **SSRF `DelegatingHandler`** (see `hardening` → SSRF) composes **inside** the resilience handler —
+  (see `dotnet:hardening` → Idempotency) must not be auto-retried.
+- The **SSRF `DelegatingHandler`** (see `dotnet:hardening` → SSRF) composes **inside** the resilience handler —
   resilience must not defeat the IP allow-list.
 - Pipelines **emit OpenTelemetry** metrics/traces out of the box; wire them through the existing OTLP
-  exporter (`observability`).
+  exporter (`dotnet:observability`).
 - **Hedging** (parallel attempt to a second replica) cuts tail latency — enable only where the
   operation is safe to run twice.
 - **Chaos in tests:** inject faults/latency with `AddChaosFault` / `AddChaosLatency` (Polly.Chaos /
   Simmy) to prove the pipeline degrades gracefully before production does.
+
+## Related
+
+- `dotnet:hardening` (`../hardening/SKILL.md`) — Production Hardening (FAANG-level)
+- `dotnet:observability` (`../observability/SKILL.md`) — Observability (OpenTelemetry-native, FAANG-level)
