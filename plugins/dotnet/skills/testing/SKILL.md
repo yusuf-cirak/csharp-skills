@@ -7,6 +7,19 @@ description: Use when writing, editing, reviewing, or generating any C# test (`*
 
 The user's personal testing rules — test project layout & naming, `Method_State_Expectation` naming, AAA structure, asserting on `Result<T>`/`Option<T>` monads, unit-vs-integration split, `ICollectionFixture` Testcontainers base class, and DDD layer-boundary enforcement. **Check the project first** (existing test projects' package references): if it already has a test framework/assertion/mocking library, keep using it — these rules are about structure and discipline (naming, AAA, monad assertions, real-dependency integration tests), not about forcing a library swap. On a **new** test project with no existing convention, the recommended default stack is xUnit + Shouldly + NSubstitute + Testcontainers + Respawn + Bogus + NetArchTest (see table below) — propose it and confirm before adding packages the project doesn't have yet. Apply alongside `csharp` (records/monads/idioms). Production-grade CI/SAST/DAST/mutation gates live in `hardening` → CI/Test Security; this skill governs how tests themselves are written.
 
+## Map — jump to the section when…
+
+| Section | Load when |
+|---|---|
+| Recommended stack · Project layout & naming | new test project; naming, folders |
+| Asserting on monads · Unit tests · Test data — Bogus builders | `Result<T>`/`Option<T>` asserts, AAA, builders |
+| Integration tests — Testcontainers | Postgres/Redis/Kafka fixtures, `WebApplicationFactory`, concurrency tests |
+| Testing middleware & Activity/baggage · Auth integration tests | `Activity.Current`, JWT test tokens, 401/403 matrix |
+| Architecture tests (DDD boundaries) · Coverage / CI | layer rules, coverage/mutation gates |
+| LLM & security tests · Anti-patterns (forbidden) · Related skills | prompt-injection tests; what never to do |
+
+Sibling skills: `dotnet:csharp` · `dotnet:ddd` · `dotnet:web-api` · `dotnet:validation` · `dotnet:hardening` · `dotnet:observability`. See **Related skills** at the end.
+
 ## Recommended stack (new projects; match the existing one otherwise)
 
 | Concern | Library | Note | Common alternatives |
@@ -291,9 +304,9 @@ Minimum rules: Domain depends on nothing outward; Application never references I
 
 ## Related skills
 
-- `csharp` — records/monads/idioms the SUT and builders follow.
-- `ddd` — the layer boundaries the architecture tests enforce.
-- `web-api` — endpoints exercised by integration tests.
-- `validation` — `InputLimits`/VO rules asserted in unit tests.
-- `hardening` — CI gates, mutation testing, security-header/`429` assertions.
-- `observability` — `ActivityListener` middleware tests; `OTEL_SDK_DISABLED` in integration tests.
+- `dotnet:csharp` — records/monads/idioms the SUT and builders follow.
+- `dotnet:ddd` — the layer boundaries the architecture tests enforce.
+- `dotnet:web-api` — endpoints exercised by integration tests.
+- `dotnet:validation` — `InputLimits`/VO rules asserted in unit tests.
+- `dotnet:hardening` — CI gates, mutation testing, security-header/`429` assertions.
+- `dotnet:observability` — `ActivityListener` middleware tests; `OTEL_SDK_DISABLED` in integration tests.

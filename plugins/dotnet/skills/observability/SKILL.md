@@ -11,6 +11,18 @@ Telemetry is **OpenTelemetry-native and OTLP-first**: traces (`ActivitySource` p
 
 **Vendor neutrality:** export OTLP and point it at *any* collector. SigNoz / Jaeger / Tempo / Grafana / Prometheus is an org/deploy choice, never baked into code. Override the endpoint with the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (gRPC `:4317`).
 
+## Map — jump to the section when…
+
+| Section | Load when |
+|---|---|
+| Pillars & setup | `AddOpenTelemetry`, `Resource`, exporters |
+| Traces · Metrics (System.Diagnostics.Metrics) · Logs (OTel-native) · Source-generated logging (`[LoggerMessage]`, .NET 6+) — the default | `ActivitySource`, `Meter`, `ILogger`, `[LoggerMessage]`, processors, sampling |
+| Correlation & context | `correlation_id`, baggage, message propagation |
+| Health checks & probes (Kubernetes model) · SLO & alerting | liveness/readiness, burn-rate alerts |
+| Gotchas (hard-won) · Related skills | before finishing any telemetry change |
+
+Sibling skills: `dotnet:hardening` (log redaction, headers) · `dotnet:csharp` · `dotnet:testing`. See **Related skills** at the end.
+
 ## Pillars & setup
 
 One `AddOpenTelemetry()`, one shared `Resource`, one OTLP exporter per signal. Centralize source/meter names as constants (see `csharp` → Constants).
@@ -183,6 +195,6 @@ internal sealed class ShutdownReadinessHealthCheck : IHealthCheck
 
 ## Related skills
 
-- `hardening` — security headers, HTTP-logging redaction + header allow-list, rate limiting, forwarded headers (real client IP), error/ProblemDetails shape.
-- `csharp` — centralized constants (source/meter/baggage names), allocation-minimal hot-path idioms, `Guid.CreateVersion7`.
-- `testing` — `ActivityListener` to test middleware/baggage; `OTEL_SDK_DISABLED` in integration tests.
+- `dotnet:hardening` — security headers, HTTP-logging redaction + header allow-list, rate limiting, forwarded headers (real client IP), error/ProblemDetails shape.
+- `dotnet:csharp` — centralized constants (source/meter/baggage names), allocation-minimal hot-path idioms, `Guid.CreateVersion7`.
+- `dotnet:testing` — `ActivityListener` to test middleware/baggage; `OTEL_SDK_DISABLED` in integration tests.

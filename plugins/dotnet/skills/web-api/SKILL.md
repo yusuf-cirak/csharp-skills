@@ -7,6 +7,8 @@ description: Use when writing or editing ASP.NET Core endpoints, handlers, contr
 
 Owns **how requests are shaped and handled** — the endpoint/handler/slice surface, the vertical-slice file skeleton (`static class <Name>Command` holding Endpoint/Request/Validator/Handler/Response), FastEndpoints/Minimal API/mediator handler wiring, FluentValidation basics, the pagination request base, and `Program.cs` middleware pipeline ordering. *Where* a slice sits in the module tree comes from `ddd`; record/monad idioms come from `csharp`; hard input limits come from `validation`.
 
+**Sections:** Vertical slice file · FluentValidation · Pagination · Strongly-typed id binding · Middleware pipeline order & registration safety (Canonical order; Fail fast on a missing prerequisite) · Related skills.
+
 ## Vertical slice file
 
 One slice file holds Command/Query + Handler + slice-specific DTOs/Validators. (Placement under `Features/<FeatureName>/<Scope>/<Commands|Queries>/` is governed by `ddd`.)
@@ -132,8 +134,8 @@ public static class IdempotencyMiddlewareExtensions
 
 ## Related skills
 
-- `csharp` — base idioms (records, monads, LINQ).
-- `ddd` — module/slice placement, domain logic.
-- `validation` — request limits, length-typed VOs, validator rules, serialization hardening.
-- `hardening` — rate limiting, authn/authz, headers, error handling, observability, forwarded headers.
-- `testing` — integration tests (`WebApplicationFactory` + Testcontainers) exercising these endpoints.
+- `dotnet:csharp` — base idioms (records, monads, LINQ).
+- `dotnet:ddd` — module/slice placement, domain logic.
+- `dotnet:validation` — request limits, length-typed VOs, validator rules, serialization hardening.
+- `dotnet:hardening` — rate limiting, authn/authz, headers, error handling, observability, forwarded headers.
+- `dotnet:testing` — integration tests (`WebApplicationFactory` + Testcontainers) exercising these endpoints.

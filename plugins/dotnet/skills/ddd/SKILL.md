@@ -7,6 +7,8 @@ description: Use when modeling a .NET domain, adding or changing an aggregate/en
 
 Owns **where domain logic lives** and how the solution is structured: DDD tactical patterns (business logic in domain models, domain services, domain events, private-constructor + static-factory aggregates, value objects for primitives, discriminated unions for variants), the Modular Monolith layout (`BuildingBlocks/*`, `Modules/<Name>/{Application,Contracts,Domain,Infrastructure}`, `Presentation/*.Host`), and Vertical-Slice module structure. Record/value-object/discriminated-union *language patterns* come from `csharp`; this skill governs domain modeling and module layout. Apply alongside `csharp`.
 
+**Sections:** Domain Driven Design · Modular Monolith Architecture · Vertical Slice Architecture (inside Application) · Strongly-typed IDs · Persisting domain types (EF Core) · Domain-event dispatch (concrete) · Placement & naming of reusable capabilities · Related skills.
+
 ## Domain Driven Design
 
 - Apply DDD principles. Business logic lives in domain models. Add domain services in the domain layer when needed.
@@ -111,8 +113,8 @@ events). One interceptor drains the aggregate's events and splits by marker.
 
 ## Related skills
 
-- `csharp` — record/VO/DU/monad language patterns used by domain models.
-- `web-api` — slice skeleton, handlers, endpoints.
-- `validation` — request DTO limits and validators.
-- `hardening` — multi-tenancy, outbox, EF hardening for the infra layer.
-- `testing` — architecture tests enforce these layer boundaries; unit tests for domain factories.
+- `dotnet:csharp` — record/VO/DU/monad language patterns used by domain models.
+- `dotnet:web-api` — slice skeleton, handlers, endpoints.
+- `dotnet:validation` — request DTO limits and validators.
+- `dotnet:hardening` — multi-tenancy, outbox, EF hardening for the infra layer.
+- `dotnet:testing` — architecture tests enforce these layer boundaries; unit tests for domain factories.

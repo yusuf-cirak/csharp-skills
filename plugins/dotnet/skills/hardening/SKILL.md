@@ -7,6 +7,24 @@ description: Use when hardening a .NET/ASP.NET Core service exposed to untrusted
 
 These rules apply to any service exposed to untrusted networks or multi-tenant traffic: tiered/distributed rate limiting & burst protection, idempotency keys & webhook HMAC, authn/authz (short-lived tokens, refresh rotation + reuse detection, resource-level checks, tenant-from-claim), security headers & CORS, cryptography, `ProblemDetails` error handling, structured logging & audit, EF Core hardening, secure file upload, SSRF defense, deserialization safety, HTTP/application caching, multi-tenancy isolation, background jobs/outbox, supply-chain security, and API versioning/lifecycle. They are non-negotiable defaults; deviations need a written justification on the PR. DTO/serialization input limits are owned by `validation`; this skill covers the network/runtime/ops hardening surface.
 
+## Map — jump to the section when…
+
+| Section | Load when |
+|---|---|
+| Tiered Rate Limiting & Burst Protection | `AddRateLimiter`, partition keys, Redis/distributed limiter, 429 shape |
+| Idempotency | `Idempotency-Key`, retried POSTs, webhook HMAC/replay |
+| AuthN / AuthZ | JWT bearer, refresh rotation, policies, tenant-from-claim, 401/403 |
+| Security Headers + CORS · Forwarded Headers / Real Client IP | `UseCors`, CSP/HSTS, proxies, client IP |
+| Cryptography · Error Handling · Structured Logging & Audit | secrets, hashing, `ProblemDetails`, redaction, audit trail |
+| EF Core Hardening · File Upload · SSRF Defense · XML / Deserialization Safety | raw SQL, uploads, outbound URLs, XML/JSON parsing |
+| Resilience (outbound calls) · Transport (compression & decompression) · HTTP Caching · Application Caching (hybrid L1/L2) | outbound calls, compression, `Cache-Control`, hybrid cache |
+| Multi-Tenancy · Background Jobs & Messaging | tenant isolation, outbox, consumers |
+| Dependency & Supply Chain · CI / Test Security | NuGet audit, lock files, CI gates |
+| Observability · API Versioning & Lifecycle · Cancellation & Timeouts | log redaction link-out, deprecation, timeouts |
+| LLM / Prompt-Injection Hardening · Related skills | untrusted text reaching a model or prompt |
+
+Sibling skills: `dotnet:validation` (DTO limits) · `dotnet:observability` (telemetry) · `dotnet:web-api` (middleware order) · `dotnet:testing` · `dotnet:ddd` · `dotnet:csharp`. See **Related skills** at the end.
+
 ## Tiered Rate Limiting & Burst Protection
 
 Rate limiting must be **multi-dimensional**, **distributed**, and **partitioned by principal + endpoint**. A single global bucket is not enough.
@@ -399,9 +417,9 @@ Any text a caller (or an admin, or a document) can influence is **untrusted data
 
 ## Related skills
 
-- `observability` — OTel-native traces/metrics/logs, correlation/baggage, health probes, SLO/alerting (the logging pipeline that enforces this skill's redaction policy).
-- `validation` — DTO/serialization input limits, `InputLimits`, length-typed VOs.
-- `web-api` — endpoint/handler shape these policies attach to.
-- `ddd` — outbox/domain-event and module boundaries.
-- `csharp` — base idioms (records, monads, performance).
-- `testing` — how tests are written; the CI/Test Security gates here (coverage, Stryker, header/`429` snapshots) are exercised by that standard.
+- `dotnet:observability` — OTel-native traces/metrics/logs, correlation/baggage, health probes, SLO/alerting (the logging pipeline that enforces this skill's redaction policy).
+- `dotnet:validation` — DTO/serialization input limits, `InputLimits`, length-typed VOs.
+- `dotnet:web-api` — endpoint/handler shape these policies attach to.
+- `dotnet:ddd` — outbox/domain-event and module boundaries.
+- `dotnet:csharp` — base idioms (records, monads, performance).
+- `dotnet:testing` — how tests are written; the CI/Test Security gates here (coverage, Stryker, header/`429` snapshots) are exercised by that standard.

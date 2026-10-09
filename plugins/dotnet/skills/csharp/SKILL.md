@@ -7,6 +7,8 @@ description: C# house style. Use before writing, editing, or reviewing any C#/.N
 
 Permanent C# rules for this codebase. Every `.cs` edit follows the core below; branch topics sit one pointer away in `references/`; sibling skills own their own surface. When a framework or language version blocks a rule, write the closest equivalent and say why.
 
+**Sections:** Route first · Namespaces & file organization · Naming & layout (Microsoft framework style) · Immutability & records · Discriminated unions · State as types · Value objects · Errors · Modern C# · Time · Constants · References — load when · Decision notes.
+
 ## Route first
 
 Before the first edit, and again each time the work changes shape, collect signals from what you **touch** (paths, project files), what you **write** (constructs), and what the **user asks**. Invoke every sibling whose signal is present, via the Skill tool. Combinations are the norm; when a signal is ambiguous, load the skill.

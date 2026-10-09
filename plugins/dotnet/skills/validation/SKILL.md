@@ -7,6 +7,18 @@ description: Use when defining or reviewing ASP.NET Core request DTOs/commands/q
 
 Every endpoint, DTO, validator, value object, and JSON configuration MUST enforce hard limits on input size, depth, and shape: the central `InputLimits` constants, length-typed `Text` value objects (`ShortText`/`MediumText`/`LongText`/`XLongText`, `Email`/`Slug`/`Url`/`PhoneNumber`) instead of raw `string`, mandatory FluentValidation rules, global `JsonSerializerOptions` hardening, Kestrel/`FormOptions` limits, per-endpoint size override, mandatory pagination, and output encoding. Never trust client input. Apply these rules by default — only relax them with an explicit, justified opt-in. Pairs with `web-api` (endpoint shape) and `csharp` (VO/record idioms).
 
+## Map — jump to the section when…
+
+| Section | Load when |
+|---|---|
+| 1. Central `InputLimits` constants · 2. Length-typed `Text` value objects | any string/collection property on a DTO |
+| 3. FluentValidation — mandatory rules · 3b. Validators run in the pipeline (mediator pipeline behavior) | writing or reviewing a validator |
+| 4. Global `JsonSerializerOptions` hardening · 5. Kestrel & FormOptions limits · 6. Per-endpoint override (opt-in only) | body/depth/form size limits |
+| 7. Pagination is mandatory · 8. Rate limiting · 10. Output encoding | list endpoints; HTML/JS output |
+| 9. Anti-patterns (forbidden) · Related skills | final review checklist |
+
+Constants class source: `../csharp/references/input-limits.md`. Sibling skills: `dotnet:web-api` · `dotnet:hardening` · `dotnet:csharp` · `dotnet:testing`. See **Related skills** at the end.
+
 ## 1. Central `InputLimits` constants
 
 All length / size / count limits live in one shared static class (place in `BuildingBlocks.Domain` or the project's equivalent shared layer). Validators, value objects, endpoints, and Kestrel config reference these — never inline magic numbers.
@@ -198,7 +210,7 @@ When emitting user-controlled data into HTML/JS/CSS contexts, use `HtmlEncoder.D
 
 ## Related skills
 
-- `csharp` — value object / record / monad idioms.
-- `web-api` — endpoint/handler/validator shape.
-- `hardening` — rate limiting, authn/authz, headers, file upload, SSRF, deserialization safety.
-- `testing` — unit tests asserting `InputLimits`/VO factory rules; integration tests for the 400/validation envelope.
+- `dotnet:csharp` — value object / record / monad idioms.
+- `dotnet:web-api` — endpoint/handler/validator shape.
+- `dotnet:hardening` — rate limiting, authn/authz, headers, file upload, SSRF, deserialization safety.
+- `dotnet:testing` — unit tests asserting `InputLimits`/VO factory rules; integration tests for the 400/validation envelope.
