@@ -39,6 +39,9 @@ description: Hardens ASP.NET Core services exposed to untrusted or multi-tenant 
 - `../csharp/references/caching.md` — Application caching — hybrid L1/L2 (shared reference)
 - `../csharp/references/ef-core-data-access.md` — EF Core data access — performance & value-object persistence (single source of truth)
 - `../csharp/references/value-object-base.md` — Value Object base type + converters (via nested link)
+- `../csharp/references/build-and-analyzers.md` — Build & analyzers — gates, branch-aware style enforcement, generator packaging
+- `../csharp/references/outbox-debezium-masstransit.md` — Outbox → Debezium → Kafka → MassTransit — the concrete traps
+- `../csharp/references/mediator.md` — Mediator selection & licensing (via nested link)
 - `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
 - `dotnet:observability` (`../observability/SKILL.md`) — Observability (OpenTelemetry-native, FAANG-level)
 - `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
@@ -60,7 +63,7 @@ Dimensions:
 - **Tier multiplier** — anonymous gets 0.25×; authenticated 1×; internal/service 5×. The privileged (internal/service) tier MUST be asserted from a **trusted authentication scheme** (mTLS / internal API-key scheme), never from a value the caller can place in its own JWT — a forgeable tier claim is both a rate-limit bypass and a privilege escalation.
 - **Failed-auth lockout** — 5 failures / 10 min on login or token endpoints → 30 min lock on `(username, ip)`. Mitigates credential stuffing.
 
-Partition key precedence: authenticated user id → API key id → `hash(client IP + UA)`. Raw IP alone is too coarse (NAT/CGNAT).
+Partition key precedence: authenticated user id (`sub`) → API key id (hashed) → `hash(client IP)`. **Never add the `User-Agent` (or any other caller-controlled header) to the anonymous key** — the caller can vary it per request and mint unlimited buckets. Behind a proxy use the forwarded-headers-resolved IP (see "Forwarded Headers"), never the raw `X-Forwarded-For`. Raw IP is coarse for NAT/CGNAT, which is why the anonymous tier gets the smallest multiplier rather than a finer key.
 
 **Partition on the matched route *template*, never the raw path.** Keying on `Request.Path` means `/items/1`, `/items/2`, … each get their own bucket and the effective limit multiplies — a trivial bypass. Read the matched `RouteEndpoint.RoutePattern.RawText` (fall back to the raw path only when no endpoint matched).
 
@@ -136,6 +139,10 @@ Soft-ban after burst hit: implement a small middleware or `OnRejected` extension
 - **In-memory** (`AddRateLimiter` default) — dev / single-instance only. Each process has its own counter; behind a load balancer the limit is multiplied by N.
 - **Distributed (Redis)** — required for any multi-instance prod deployment. Use a community package such as `RedisRateLimiting`, or wrap `StackExchange.Redis` with a Lua script (`INCR` + `EXPIRE`) for atomicity.
 - **Fail open, not closed.** When Redis is unreachable (`AbortOnConnectFail = false`; guard on `IConnectionMultiplexer.IsConnected`), degrade to a per-node in-memory limiter rather than 429-ing every request — a rate-limiter outage must not become a self-inflicted DoS. Emit a `ratelimit.fallback` counter so the degraded (per-node, multiplied-by-N) state is observable and alertable.
+- **Budget the Redis round-trips.** The naive distributed setup costs **2 Redis round-trips per request** — a ban lookup (`PTTL`) plus the limiter's Lua script. Remove both with two patterns; Redis stays authoritative and fail-open is preserved:
+  - **Local ban mirror + pub/sub.** The hot path reads only a per-node `IMemoryCache` mirror of active bans, so the common case (not banned) costs **0** Redis ops. Banning sets the local entry, `PUBLISH`es on a channel, and writes a TTL key to Redis for durability (never read on the hot path). An `IHostedService` subscribes and mirrors every broadcast into its node's cache. Pub/sub is best-effort — a dropped message or a late-joining node can miss a ban until it is re-armed; acceptable because bans are short and the limiter itself still enforces.
+  - **Two-tier limiter.** A per-node in-memory limiter whose cap **equals the global permit limit** fronts the Redis limiter (a `RateLimiter` subclass composing the library's Redis limiter). A local reject returns without touching Redis — a flood shield. Cap == global means it never false-rejects: one node alone exceeding the global limit means the fleet is over it too. Gate it behind `RateLimiting:LocalPreLimit` (default on, distributed mode only).
+  - **Test isolation:** the local ban mirror and local windows survive a Redis `FLUSHDB`, so state leaks across tests that share one host and the first request spuriously returns 429. In the integration fixture set `LocalPreLimit=false` and have the reset helper also clear the ban mirror's `MemoryCache`; cover the two-tier and hybrid-ban classes with unit tests instead.
 
 ```csharp
 // Distributed example (RedisRateLimiting package)
@@ -204,7 +211,7 @@ Inbound webhooks: require HMAC signature + `X-Timestamp` (reject if `|now - ts| 
 - **Tenant id MUST come from a token claim**, never from route/query/body. Expose via `ICurrentTenant` populated from `HttpContext.User`.
 - `mTLS` for service-to-service traffic inside the cluster.
 
-JWT bearer validation — hardened defaults (config-driven: symmetric secret for dev/test, OIDC `Authority`+JWKS for prod):
+JWT bearer validation — hardened defaults (config-driven: an **asymmetric key pair is the default**; OIDC `Authority`+JWKS for prod; a symmetric HMAC secret only as an explicit opt-in for a single-process dev/test setup):
 
 ```csharp
 o.MapInboundClaims = false; // keep "sub" as "sub" — rate-limiter, audit and log enrichment read it raw
@@ -217,6 +224,13 @@ o.TokenValidationParameters = new()
 };
 ```
 
+- **Sign asymmetrically by default — ES256 (RS256 where a consumer needs it).** The issuer holds the private key; every API validates with the public key only (JWKS, or a configured JWK/PEM). With HS256 every validating service holds the secret that can *mint* tokens, so one compromised service forges tokens for all of them. Symmetric signing is acceptable only when issuer and validator are the same process in dev/test, and it must be an explicit opt-in — never the options default. The private key comes from the secret store (Key Vault etc.), never `appsettings` or the repo; an issuing service publishes its public keys at `/.well-known/jwks.json`.
+- **Pin the algorithm.** Set `ValidAlgorithms = ["ES256"]` so a token cannot downgrade to `none` or to an HMAC verified with the public key as the secret (algorithm confusion).
+- **Rotate keys with `kid`.** Sign with the current key and stamp its `kid`; keep retired *public* keys validation-only (`kid` → key) for at least the access-token TTL plus clock skew, then drop them. Publish a new key in the JWKS **before** signing with it. Resolve the validation key by `kid`, not by trying every key:
+  ```csharp
+  o.TokenValidationParameters.ValidAlgorithms = ["ES256"];
+  o.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, kid, _) => keyStore.ForKid(kid); // current + previous public keys
+  ```
 - **Secure by default**: register the authenticated fallback policy (above). It also applies to **unmatched routes**, so an anonymous request to an unknown path returns **401, not 404** (route existence is not leaked). Mark health/docs endpoints `AllowAnonymous`.
 - **Scope authorization**: read OAuth scopes from both conventions — a space-delimited `scope` claim **and** repeated `scp` claims. Expose a `.RequireScope("orders:write")` endpoint helper (a policy + `IAuthorizationHandler`) following the same convention as `.RequireIdempotency()`. Roles use the native `.RequireAuthorization(p => p.RequireRole(...))`.
 - **401/403 as problem+json**: wire `JwtBearerEvents.OnChallenge` (401) and `OnForbidden` (403) to write RFC 9457 `ProblemDetails` via `IProblemDetailsService` (consistent with the global handler — same `traceId`/`correlation_id` stamping), set `WWW-Authenticate` on challenge, and **never leak token-validation specifics** to the caller (`OnAuthenticationFailed` stays silent in prod; detail lives in the trace/logs).
@@ -369,12 +383,13 @@ rules + library pick (FusionCache): `../csharp/references/caching.md`.
 - Handlers MUST be idempotent. Concrete dedup: persist a `(message_id, consumer)` **unique** row in the *same transaction* as the handler's state change, and treat a unique-violation on insert (`SQLSTATE 23505` — provider-agnostic, read `DbException.SqlState`) as an idempotent no-op (a concurrent/redelivered duplicate), **not** an error to retry into a poison loop.
 - **The dedup key should be deterministic, not random, when the message is derived from stable content** (reprocessing the same source record, reacting to the same upstream event). A `Guid.NewGuid()` per publish defeats dedup entirely — two publishes for the same logical event get two different ids and both pass the unique-row check. Hash the stable identifying content into a deterministic id instead (a fast non-cryptographic hash — e.g. FNV-1a over the content — folded into a `Guid`) and set it as the message/`MessageId` the dedup check keys on, so re-publishing the same logical event (a retry, a redelivery, a second producer instance) always lands on the same key. Reserve `Guid.CreateVersion7()` (see `csharp`) for ids that must be *unique per occurrence* — the two are solving opposite problems.
 - Retry: exponential backoff with jitter, bounded attempts (default 5). Poison messages → DLQ; alert on DLQ depth.
-- Cross-aggregate writes use the **Outbox pattern** — never dual-write to DB + broker.
+- Cross-aggregate writes use the **Outbox pattern** — never dual-write to DB + broker. The concrete Debezium / MassTransit / polling-relay traps: `../csharp/references/outbox-debezium-masstransit.md`.
+- **Distributed lock** (single-flight job, one-migrator-at-a-time): use a library (e.g. Medallion `DistributedLock.Redis`), never a hand-rolled Lua lock. Take it non-blocking — `TryAcquireAsync(TimeSpan.Zero)` returns `null` when held, so the caller skips instead of queueing; the handle auto-renews its TTL while held and releases on dispose, so the TTL only bounds crash recovery. A lock on a single Redis database is not safe across a Redis failover — treat it as an *efficiency* guard and keep the guarded work idempotent (fencing token or unique constraint) for correctness.
 - This section owns **distributed/broker** reliability. For a purely **in-process** producer/consumer queue (no broker), use the `System.Threading.Channels` + `BackgroundService` primitive in `csharp` → Background work & channels.
 
 ## Dependency & Supply Chain
 
-- Central package versions in `Directory.Packages.props`.
+- Central package versions in `Directory.Packages.props`. Analyzer gating, `WarningsNotAsErrors` policy and generator `PrivateAssets`: `../csharp/references/build-and-analyzers.md`.
 - CI: `dotnet list package --vulnerable --include-transitive` — **fail the build** on any CVE.
 - Generate CycloneDX SBOM in the release pipeline.
 - Pre-commit secret scanning (`gitleaks` / `trufflehog`).

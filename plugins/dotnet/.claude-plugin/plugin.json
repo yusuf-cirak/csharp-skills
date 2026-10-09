@@ -1,6 +1,6 @@
 {
   "name": "dotnet",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Personal C# / .NET / ASP.NET Core coding standards: a 7-skill family (csharp entry point + ddd, web-api, validation, hardening, observability, testing) with shared references under csharp/references.",
   "author": {
     "name": "Yusuf Cirak",

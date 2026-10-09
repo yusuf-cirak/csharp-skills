@@ -18,7 +18,7 @@ description: Applies the C# house style and routes to the sibling skills. Use be
 - Modern C#
 - Time → `dotnet:testing`
 - Constants → `dotnet:validation`
-- References — load when → `references/linq.md`, `references/performance.md`, `references/async-concurrency.md`, `references/composition.md`, `references/state-as-types.md`, `references/value-object-base.md`, `references/monads.md`, `references/ef-core-data-access.md`, `references/mediator.md`, `references/resilience.md`, `references/caching.md`, `references/input-limits.md`
+- References — load when → `references/linq.md`, `references/performance.md`, `references/async-concurrency.md`, `references/composition.md`, `references/state-as-types.md`, `references/value-object-base.md`, `references/monads.md`, `references/ef-core-data-access.md`, `references/mediator.md`, `references/resilience.md`, `references/caching.md`, `references/input-limits.md`, `references/build-and-analyzers.md`, `references/outbox-debezium-masstransit.md`
 - Decision notes
 
 ## Files
@@ -35,6 +35,8 @@ description: Applies the C# house style and routes to the sibling skills. Use be
 - `references/resilience.md` — Resilience pipelines (single source of truth)
 - `references/caching.md` — Application caching — hybrid L1/L2 (shared reference)
 - `references/input-limits.md` — InputLimits constants
+- `references/build-and-analyzers.md` — Build & analyzers — gates, branch-aware style enforcement, generator packaging
+- `references/outbox-debezium-masstransit.md` — Outbox → Debezium → Kafka → MassTransit — the concrete traps
 - `dotnet:ddd` (`../ddd/SKILL.md`) — .NET Domain-Driven Design & Architecture
 - `dotnet:web-api` (`../web-api/SKILL.md`) — ASP.NET Core Web API
 - `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
@@ -128,7 +130,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 ## Constants
 
 - Compile-time values → `const`; otherwise `static readonly`. Every literal has a name.
-- Cross-cutting names (HTTP headers, claim types, baggage/log keys, policy/queue/topic names, message headers) are defined once in a shared-kernel static class (`TelemetryConstants`, `MessageHeaders`) so producer, logs, and consumer agree.
+- Cross-cutting names (HTTP headers, claim types, baggage/log keys, policy/queue/topic names, message headers) are defined once in a static class in the lowest layer every consumer references — telemetry keys in `BuildingBlocks.Application` (`TelemetryConstants`), **not** Domain (see `dotnet:ddd` → cross-cutting ports); broker wire headers in the messaging Infrastructure project (`MessageHeaders`) — so producer, logs, and consumer agree.
 - Options types carry their config path as `public const string SectionName`. Input size limits live in `InputLimits` (`dotnet:validation`).
 
 ## References — load when
@@ -147,6 +149,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 | `references/resilience.md` | outbound calls: Polly v8 pipelines, chaos testing |
 | `references/caching.md` | application cache (hybrid L1/L2, FusionCache) |
 | `references/input-limits.md` | the `InputLimits` constants class |
+| `references/build-and-analyzers.md` | `Directory.Build.props` / analyzer gates, `PrivateAssets` for generators, slow builds |
+| `references/outbox-debezium-masstransit.md` | outbox, Debezium connector, MassTransit Kafka consumer, polling relay |
 
 ## Decision notes
 

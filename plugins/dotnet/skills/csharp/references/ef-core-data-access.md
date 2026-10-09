@@ -3,6 +3,9 @@
 ## Contents
 
 - DbContext defaults — no-tracking, split query
+- PostgreSQL naming — snake_case, no hand-written names
+- Projectables — one expression, in memory and in SQL
+- Migrations on a rolling deploy — expand / contract
 - Bulk operations (EF 7+)
 - N+1 — the other half of the cartesian-explosion coin
 - Query performance
@@ -28,6 +31,82 @@ services.AddDbContextPool<AppDbContext>(o => o
 - **Write paths opt in**: load the row you will mutate with `.AsTracking()`.
 - **Opt out of split where one join is cheaper**: `.AsSingleQuery()` on a query with a single small collection.
 - Keep `AsNoTrackingWithIdentityResolution()` for graph reads that share references.
+- **Footgun — no-tracking silently drops writes.** A handler that loads an aggregate by query, mutates it and calls
+  `SaveChangesAsync()` MUST load it with `.AsTracking()`; on an untracked entity change detection finds nothing and the
+  `UPDATE` is skipped with no error (and an `xmin`/rowversion concurrency check never runs). `Add`, `Attach` and
+  `Update` are unaffected — the default only governs entities *returned by queries*.
+
+## PostgreSQL naming — snake_case, no hand-written names
+
+On Npgsql, use the **`EFCore.NamingConventions`** package and let EF derive every table and column name. Never write
+`ToTable(...)` / `HasColumnName(...)` per entity.
+
+- **Why snake_case on Postgres:** unquoted identifiers fold to lower case, so PascalCase names EF generates
+  (`"UserId"`) must be double-quoted in every raw query, `psql` session, BI tool and CDC/Debezium config. Snake_case
+  (`user_id`) never needs quoting.
+- Table name comes from the `DbSet` property, columns from the CLR property names, both snake-cased.
+  `OnModelCreating` then holds only what a convention cannot infer: keys, `ValueGeneratedNever()`, and Postgres types
+  (`HasColumnType("jsonb")`).
+- Put the defaults in **one extension** so every module context is a single call:
+
+  ```csharp
+  public static DbContextOptionsBuilder UseModuleConventions(this DbContextOptionsBuilder o) =>
+      o.UseSnakeCaseNamingConvention().UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+
+  // module registration
+  services.AddDbContext<EventsDbContext>(o => o
+      .UseNpgsql(cs, npg => npg.MigrationsHistoryTable("__ef_migrations", EventsDbContext.Schema))
+      .UseModuleConventions());
+  ```
+
+  Model-level conventions (Vogen converters, `string` null→empty) go in a sibling
+  `ApplyAppConventions(this ModelConfigurationBuilder, Assembly)` called from `ConfigureConventions`.
+- **Every place that builds options must apply the convention**, or the model and the migrations disagree:
+  1. the module's `IDesignTimeDbContextFactory<T>` — without it `dotnet ef migrations add` against the module
+     project silently generates a non-snake migration;
+  2. any test that builds its own `DbContextOptions` — otherwise `MigrateAsync` fails on a model/migration mismatch.
+- One schema per module (`HasDefaultSchema`) and the migrations history table in that schema, so modules migrate
+  independently.
+- Anything outside EF that names columns (Debezium `table.field.*`, raw SQL, dashboards) uses the snake_case names —
+  the PK is `id`, not `Id`.
+
+## Projectables — one expression, in memory and in SQL
+
+`EntityFrameworkCore.Projectables` makes a computed domain member usable inside an EF query, so the rule is written
+once instead of once as a C# property and again as a duplicated `Where` predicate:
+
+```csharp
+// Domain
+[Projectable] public bool IsLargeVenue => Capacity >= LargeVenueThreshold;   // expression-bodied only
+
+// DbContext options
+options.UseProjectables();
+
+// Query — translated to SQL (WHERE capacity >= 1000), not evaluated client-side
+db.Events.Where(e => e.IsLargeVenue).Select(e => new EventDto(e.Id, e.Name, e.IsLargeVenue));
+```
+
+- Members must be **expression-bodied and made only of things EF can translate**; a `[Projectable]` that calls an
+  untranslatable method fails at query time, so cover each with an integration test against the real provider.
+- Call `.UseProjectables()` on every context whose queries use them — missing it makes the member evaluate
+  client-side or throw.
+- **Packaging:** reference it with `PrivateAssets="analyzers"`, **not** `"all"`. The package ships a runtime library
+  the generated LINQ depends on, so `"all"` compiles but every query throws `FileNotFoundException` at runtime
+  (same trap as Vogen). Pure Roslyn analyzers with no runtime lib (Meziantou) are the only ones that take `"all"`.
+  Where the domain is its own project, reference only `EntityFrameworkCore.Projectables.Abstractions` there.
+
+## Migrations on a rolling deploy — expand / contract
+
+If migrations run at startup on every instance, a rolling deploy briefly runs **old and new code against the new
+schema**. Safety comes only from how each migration is written. Break a breaking change into three steps:
+
+1. **Expand** — an additive, backward-compatible migration (new column nullable or defaulted, new table). Ships and runs first.
+2. **Migrate code** — deploy code that writes the new shape while still reading/writing the old one.
+3. **Contract** — only after every old-code instance is gone, a later migration drops the old column or adds the `NOT NULL`.
+
+Never rename or drop a column and add its replacement in the same migration: that instant is exactly when an
+old-code instance still expects the old shape. Take a distributed lock (see `dotnet:hardening` → Background Jobs) so
+only one instance migrates at a time.
 
 ## Bulk operations (EF 7+)
 

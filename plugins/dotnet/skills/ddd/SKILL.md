@@ -14,6 +14,7 @@ description: Guides .NET domain modeling and solution layout. Use when modeling 
 - Persisting domain types (EF Core) → `../csharp/references/ef-core-data-access.md`
 - Domain-event dispatch (concrete) → `dotnet:hardening`, `dotnet:csharp`
 - Placement & naming of reusable capabilities
+- Cross-cutting ports & primitives live in Application, not Domain
 - Related skills → `dotnet:csharp`, `dotnet:web-api`, `dotnet:validation`, `dotnet:hardening`, `dotnet:testing`
 
 ## Files
@@ -166,6 +167,30 @@ events). One interceptor drains the aggregate's events and splits by marker.
   `ExpenseOcrLimits`), so a generic-looking name never implies reuse that was not designed.
 - **Fail-closed gates sit at the write boundary** (the command that persists the setting), not deep inside the
   consumer — reject before bad data can be stored or served.
+
+## Cross-cutting ports & primitives live in Application, not Domain
+
+`BuildingBlocks.Domain` holds **only business concepts**: aggregate bases, value objects, domain events, and real domain
+traits that aggregates implement (`IAuditable`, `ITenantOwned`). Anything that models *no business concept* but that many
+layers need goes in `BuildingBlocks.Application` — every Infrastructure, Presentation and module project already
+references it (directly or transitively), so it is the lowest common home that does not pollute the domain:
+
+| Lives in `BuildingBlocks.Application` | Why not Domain |
+|---|---|
+| `ICurrentUser`, `ITokenBlacklist` (+ `Anonymous…`/`NoOp…` defaults) | who is calling / revoked tokens is a request concern, not a business rule |
+| `IAuditLogger` | a port for recording audits; the *trait* `IAuditable` stays in Domain |
+| `TelemetryConstants` (correlation / instrument-name keys) | telemetry contract, not domain language (broker wire headers such as `MessageHeaders` stay in the messaging Infrastructure project that owns that wire contract) |
+| `MigrationReadinessTracker` and similar startup-coordination primitives | ops plumbing |
+
+Test: *"would a domain expert recognise this word?"* Yes → Domain. No → Application (a port) or Infrastructure (its
+implementation). Ports are declared in Application and implemented in Infrastructure/Presentation — dependencies point
+inward only.
+
+Footgun for the architecture test: **NetArchTest reads `const string` IL literals as dependencies.** A constants class whose
+values equal layer namespaces (e.g. OTel meter names `"BuildingBlocks.RateLimiting"`) makes
+`Application_must_not_depend_on_infrastructure…` fail with a false positive. Exclude that type
+(`.That().DoNotHaveName("TelemetryConstants")`) or avoid namespace-valued literals. Architecture tests enforce dependency
+*direction* only — placement above is a convention they cannot check.
 
 ## Related skills
 
