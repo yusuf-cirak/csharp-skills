@@ -42,8 +42,9 @@ Owns **where domain logic lives** and how the solution is structured: DDD tactic
 - Use **discriminated unions** for types with multiple variants.
 - Model aggregate/entity **state machines as types**, not boolean flags or a status enum: sealed
   per-state subtypes that expose only their legal operations, a DU for the state payload, capability
-  interfaces, and `Try*` pattern-matched transitions. Persistence keeps the rich domain model separate
-  from the flat DB shape (or stores polymorphic JSON). Full pattern: `../csharp/references/state-as-types.md`.
+  interfaces, and `Try*` pattern-matched transitions. Pick the stored shape (flat record, TPH, or
+  polymorphic JSON) from the domain and the DB technology; callers use one `WriteTo`-style method and
+  the state decides whether it writes or no-ops. Full pattern: `../csharp/references/state-as-types.md`.
 
 ## Modular Monolith Architecture
 
@@ -94,8 +95,41 @@ Full idioms + query-perf rules: `../csharp/references/ef-core-data-access.md`.
 
 Aggregates raise events into an internal list; **a `SaveChangesInterceptor` dispatches them in the same
 transaction** — not a hand-called publish the developer can forget. For cross-process delivery, the
-interceptor writes **outbox rows** (never dual-write to a broker; see `hardening` → Background Jobs),
+outbox rows are written by an **event handler** (never dual-write to a broker; see `hardening` → Background Jobs),
 relayed by a `BackgroundService` (see `csharp` → Channels / hosted services).
+
+**The developer's whole job is one call:** raise the event in the domain (`Raise(new OrderPaid(...))`) and
+save the aggregate. Nobody (not the repository, not the command handler) adds outbox rows by hand. A
+pre-commit handler per integration event does it, inside the same transaction as the state change:
+
+```csharp
+public sealed class OrderPaidOutbox(AppDbContext db, TimeProvider time) : INotificationHandler<OrderPaid>
+{
+    public ValueTask Handle(OrderPaid e, CancellationToken ct)
+    {
+        db.OutboxMessages.Add(OutboxMessage.From(e, time.GetUtcNow()));   // same DbContext, same SaveChanges
+        return ValueTask.CompletedTask;
+    }
+}
+```
+
+Adding a new cross-process event = one event record + one such handler; no call site changes. The event
+must be handled **pre-commit** (`IPreDomainEvent`) so the row commits atomically with the state.
+
+**Two-model persistence** (flat row, aggregate not tracked; `state-as-types.md` §5a): the tracker holds
+the row, not the `AggregateRoot`, so the interceptor below finds nothing. Have the repository hand the
+drained events to a scoped `DomainEventCollector` and let the same interceptor dispatch from it:
+
+```csharp
+public sealed class DomainEventCollector
+{
+    private readonly List<IDomainEvent> _events = [];
+    public void Add(IEnumerable<IDomainEvent> events) => _events.AddRange(events);
+    public IDomainEvent[] Drain() { var e = _events.ToArray(); _events.Clear(); return e; }
+}
+// repository: order.WriteTo(record); collector.Add(order.DrainDomainEvents()); await db.SaveChangesAsync(ct);
+// interceptor: var events = tracked-aggregate events.Concat(collector.Drain())
+```
 
 ```csharp
 public sealed class DomainEventInterceptor(IPublisher publisher) : SaveChangesInterceptor
@@ -105,7 +139,7 @@ public sealed class DomainEventInterceptor(IPublisher publisher) : SaveChangesIn
     {
         var events = e.Context!.ChangeTracker.Entries<AggregateRoot>()
             .SelectMany(x => x.Entity.DrainDomainEvents()).ToArray();
-        foreach (var ev in events) await publisher.Publish(ev, ct); // or enqueue to outbox
+        foreach (var ev in events) await publisher.Publish(ev, ct); // outbox handlers add their rows here
         return await base.SavingChangesAsync(e, r, ct);
     }
 }

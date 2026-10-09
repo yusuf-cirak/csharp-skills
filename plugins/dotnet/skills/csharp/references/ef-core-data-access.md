@@ -2,6 +2,7 @@
 
 ## Contents
 
+- DbContext defaults — no-tracking, split query
 - Bulk operations (EF 7+)
 - N+1 — the other half of the cartesian-explosion coin
 - Query performance
@@ -12,6 +13,21 @@
 
 > EF Core. Version tags inline. Security/hardening rules for EF live in `dotnet:hardening` → EF Core
 > Hardening; this ref owns **performance** and **domain-type persistence**.
+
+## DbContext defaults — no-tracking, split query
+
+Set both once on the context so call sites never repeat them and a forgotten operator cannot slow a read:
+
+```csharp
+services.AddDbContextPool<AppDbContext>(o => o
+    .UseNpgsql(cs, npgsql => npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
+    .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
+```
+
+- **Reads need no operator**: no `AsNoTracking()` / `AsSplitQuery()` on queries.
+- **Write paths opt in**: load the row you will mutate with `.AsTracking()`.
+- **Opt out of split where one join is cheaper**: `.AsSingleQuery()` on a query with a single small collection.
+- Keep `AsNoTrackingWithIdentityResolution()` for graph reads that share references.
 
 ## Bulk operations (EF 7+)
 
@@ -32,7 +48,7 @@ paths only.
 
 ## N+1 — the other half of the cartesian-explosion coin
 
-`AsSplitQuery()` below fixes too-*eager* loading (multiple collection `Include`s fanning out into a
+Split query (the context default, above) fixes too-*eager* loading (multiple collection `Include`s fanning out into a
 cartesian product). N+1 is the opposite failure: too-*lazy* loading — one query to fetch a set, then one
 extra round trip **per row** to fetch each row's related data. Both come from the same root cause
 (navigation-property access without a plan for how it hits the database), and both are silent in the
@@ -56,10 +72,9 @@ LINQ — neither throws, neither shows up in review unless you're looking at the
       .Include(o => o.Lines)
       .ToListAsync(ct);
   ```
-- **A single collection `Include` stays one query** (EF translates it to one `JOIN`) — it's only
-  **multiple sibling collection `Include`s** on the same root that fan out and need `AsSplitQuery()`
-  (below). Don't reach for split-query as a blanket default: it issues one round trip per `Include`,
-  which is worse than a single join when there's only one collection in play.
+- **Split query is the context default** (see "DbContext defaults"), so multiple sibling collection
+  `Include`s on one root no longer fan out. A single small collection `Include` can be cheaper as one
+  `JOIN`: opt out per query with `.AsSingleQuery()`.
 - **Project instead of `Include` when you only read a few columns of the related data** — see "Project
   columns, not whole entities" below; a nested `Select` into the navigation inside the projection avoids
   loading (and N+1-ing) columns nothing reads.
@@ -84,10 +99,10 @@ LINQ — neither throws, neither shows up in review unless you're looking at the
       EF.CompileAsyncQuery((AppDbContext c, Guid id, CancellationToken ct) =>
           c.Orders.FirstOrDefault(o => o.Id == id));
   ```
-- **`AsSplitQuery()`** (EF 5+) — on any query with **multiple collection `Include`s**, to avoid
-  cartesian explosion (one row per child × child blows up the result set).
+- **Split query** (EF 5+): the context default; avoids cartesian explosion on multiple collection
+  `Include`s (one row per child × child blows up the result set). `.AsSingleQuery()` opts out.
 - **`AsNoTrackingWithIdentityResolution()`** (EF 5+) — read graphs without tracking but still
-  de-duplicating shared references. Default reads stay `AsNoTracking` (see `dotnet:hardening`).
+  de-duplicating shared references. Default reads are no-tracking at the context level (see "DbContext defaults").
 - **Compiled models** (EF 6+) — `dotnet ef dbcontext optimize` for large schemas / fast cold start;
   wire with `optionsBuilder.UseModel(MyModels.Instance)`.
 

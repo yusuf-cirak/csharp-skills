@@ -197,97 +197,88 @@ does not compile. There is no reachable code path that executes an unapproved tr
 
 Persistence must not force the rich domain back into flags. Two approaches, by store type.
 
-### 5a. Relational — two models, map at the boundary
+### 5a. Relational — pick the shape, then make ONE call
 
-Keep the polymorphic immutable domain (`Transfer` + `TransferCore`) free of persistence concerns. The
-DB row is a **separate flat model** — a `status` enum + approver columns. Run the domain transition on
-the immutable type, project the resulting subtype to the flat row, then `UPDATE`. Reconstitute by
-reading the row and rebuilding the correct subtype.
+Persistence must not force the rich domain back into flags, and the caller must not branch on the state
+subtype either. Choose the stored shape from the domain and the DB technology, then expose **one**
+method (`transfer.WriteTo(snapshot)`); each state writes what it owns and **no-ops** for what it does
+not.
+
+| Domain / DB situation | Stored shape |
+|---|---|
+| DB owned by this service, few stable variants, EF tracks and mutates one instance | EF **TPH** (single table + discriminator) on a mutable `class` hierarchy |
+| Transitions return new immutable instances, legacy/flag schema, or schema owned elsewhere | **Flat persistence model** (`class` when EF tracks it; `record` for Dapper / read models / snapshots) written through a domain-owned writer port (below) |
+| Variants differ a lot in payload, document or JSON-capable store | one JSON column / document (5b) |
+
+The flat-model route, with no `switch` at the call site:
 
 ```csharp
+// Domain-owned port: the shape the domain agrees to be flattened into. Infrastructure implements it.
+public interface ITransferSnapshot
+{
+    Guid Id { set; }
+    TransferStatus Status { set; }
+    string? Approver1 { set; }
+    string? Approver2 { set; }
+    string? Rejector { set; }
+    DateTimeOffset? ExecutedAt { set; }
+}
 public enum TransferStatus { Pending, Approved, Rejected, Executed, Expired }
 
-// Flat persistence model — the boolean/enum shape relational DBs prefer.
-public sealed class TransferRecord
+public abstract class Transfer
 {
-    public Guid Id { get; set; }
-    public TransferStatus Status { get; set; }
-    public string? Approver1 { get; set; }
-    public string? Approver2 { get; set; }
-    public string? Rejector { get; set; }
-    public DateTimeOffset? ExecutedAt { get; set; }
-    // + flattened TransferCore columns (amount, currency, debtor, creditor, ...)
+    // THE single entry point. Same call for every subtype.
+    public void WriteTo(ITransferSnapshot snapshot)
+    {
+        snapshot.Id = Id;
+        snapshot.Status = Status;
+        Approval.WriteTo(snapshot);   // payload variants write their own columns
+        WriteState(snapshot);         // subtype-specific extras
+        // + flattened TransferCore columns
+    }
+
+    protected abstract TransferStatus Status { get; }
+    protected virtual void WriteState(ITransferSnapshot snapshot) { }   // default: no-op
 }
 
-public static class TransferPersistenceMapping
+public sealed class PendingTransfer : Transfer { protected override TransferStatus Status => TransferStatus.Pending; /* ... */ }
+public sealed class ExecutedTransfer : Transfer
 {
-    extension(Transfer transfer)
-    {
-        public TransferRecord ToRecord()
-        {
-            var record = new TransferRecord { Id = transfer.Id /* + Core columns */ };
+    protected override TransferStatus Status => TransferStatus.Executed;
+    protected override void WriteState(ITransferSnapshot s) => s.ExecutedAt = At;
+}
 
-            // Flatten the approval payload into columns.
-            switch (transfer.Approval)
-            {
-                case PartlyApproved p: record.Approver1 = p.Approver; break;
-                case FullyApproved f: (record.Approver1, record.Approver2) = (f.Approver1, f.Approver2); break;
-                case Rejected r: record.Rejector = r.Rejector; break;
-            }
-
-            // Status is derived from the entity subtype, not stored on the domain model.
-            record.Status = transfer switch
-            {
-                PendingTransfer  => TransferStatus.Pending,
-                ApprovedTransfer => TransferStatus.Approved,
-                RejectedTransfer => TransferStatus.Rejected,
-                ExecutedTransfer e => Stamp(record, e),
-                ExpiredTransfer  => TransferStatus.Expired,
-                _ => throw new InvalidOperationException("Unhandled transfer subtype."),
-            };
-
-            return record;
-
-            static TransferStatus Stamp(TransferRecord r, ExecutedTransfer e)
-            {
-                r.ExecutedAt = e.At;
-                return TransferStatus.Executed;
-            }
-        }
-    }
-
-    extension(TransferRecord record)
-    {
-        public Transfer ToDomain()
-        {
-            var core = /* rebuild TransferCore from columns */ default(TransferCore)!;
-
-            return record.Status switch
-            {
-                TransferStatus.Pending  => new PendingTransfer(record.Id, core, RebuildApproval(record)),
-                TransferStatus.Approved => new ApprovedTransfer(record.Id, core, RebuildApproval(record)),
-                TransferStatus.Rejected => new RejectedTransfer(record.Id, core, new Rejected(record.Rejector!)),
-                TransferStatus.Executed => new ExecutedTransfer(record.Id, core, RebuildApproval(record), record.ExecutedAt!.Value),
-                TransferStatus.Expired  => new ExpiredTransfer(record.Id, core, RebuildApproval(record)),
-                _ => throw new InvalidOperationException("Unhandled transfer status."),
-            };
-        }
-    }
-
-    private static FourEyesApproval RebuildApproval(TransferRecord r) => (r.Approver1, r.Approver2) switch
-    {
-        (null, _) => new PendingApproval(),
-        (not null, null) => new PartlyApproved(r.Approver1!),
-        (not null, not null) => new FullyApproved(r.Approver1!, r.Approver2!),
-    };
+// Payload DU: a virtual WriteTo with a no-op default; only variants that carry data override it.
+public abstract record FourEyesApproval { public virtual void WriteTo(ITransferSnapshot s) { } }
+public sealed record PartlyApproved(EmployeeId Approver) : FourEyesApproval, IApprovable, IRejectable
+{
+    public override void WriteTo(ITransferSnapshot s) => s.Approver1 = Approver;
+    /* Approve / Reject as in section 1 */
+}
+public sealed record Rejected(EmployeeId Rejector) : FourEyesApproval
+{
+    public override void WriteTo(ITransferSnapshot s) => s.Rejector = Rejector;
 }
 ```
 
-**Alternative — EF Core TPH.** A single table with a discriminator column can map the polymorphic
-hierarchy directly (`modelBuilder.Entity<Transfer>().HasDiscriminator(...)`). Prefer TPH when the DB
-schema is owned by this service and the variants are few and stable; prefer the explicit two-model map
-when the DB is owned elsewhere, has a legacy flag schema, or you want the domain fully decoupled from
-the storage shape.
+The infrastructure row (`TransferRecord`) implements `ITransferSnapshot`; the repository's whole write
+path is `transfer.WriteTo(record)` plus a save. Reading is the one place a discriminator switch is
+unavoidable: keep it in a single `ToDomain()` and give each subtype a `Rehydrate` factory that rebuilds
+it **without raising events**:
+
+```csharp
+public static Transfer ToDomain(this TransferRecord r) => r.Status switch
+{
+    TransferStatus.Pending  => PendingTransfer.Rehydrate(r.Id, r.Core(), r.Approval()),
+    TransferStatus.Executed => ExecutedTransfer.Rehydrate(r.Id, r.Core(), r.Approval(), r.ExecutedAt!.Value),
+    /* ... */
+    _ => throw new InvalidOperationException("Unhandled transfer status."),
+};
+```
+
+Mirror the legal state/column combinations in a DB `CHECK` constraint so the store rejects what the
+types already forbid. Domain events raised by the transition are not the caller's job to persist; see
+`dotnet:ddd` -> Domain-event dispatch.
 
 ### 5b. Document store — store the polymorphic JSON directly
 

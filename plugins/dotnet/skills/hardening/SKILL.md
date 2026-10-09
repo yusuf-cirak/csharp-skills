@@ -37,6 +37,8 @@ description: Hardens ASP.NET Core services exposed to untrusted or multi-tenant 
 
 - `../csharp/references/resilience.md` — Resilience pipelines (single source of truth)
 - `../csharp/references/caching.md` — Application caching — hybrid L1/L2 (shared reference)
+- `../csharp/references/ef-core-data-access.md` — EF Core data access — performance & value-object persistence (single source of truth)
+- `../csharp/references/value-object-base.md` — Value Object base type + converters (via nested link)
 - `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
 - `dotnet:observability` (`../observability/SKILL.md`) — Observability (OpenTelemetry-native, FAANG-level)
 - `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
@@ -305,7 +307,7 @@ app.UseForwardedHeaders(); // FIRST
 - **No `FromSqlRaw` with string concatenation.** Use `FromSqlInterpolated` (parameterised) or no raw SQL.
 - Command timeout: read paths 10 s, write paths 30 s. Configure in `DbContext` options.
 - Soft-delete + tenant via global query filter. `.IgnoreQueryFilters()` requires a written justification + audit entry.
-- Read queries default to `AsNoTracking` (or `AsNoTrackingWithIdentityResolution` where dedupe matters).
+- The `DbContext` defaults to no-tracking + split query (`../csharp/references/ef-core-data-access.md` → DbContext defaults); write paths opt in with `.AsTracking()`; `AsNoTrackingWithIdentityResolution` where dedupe matters.
 - Connection pool sized; mirror with DB-side `statement_timeout` and `idle_in_transaction_session_timeout`.
 
 ## File Upload
