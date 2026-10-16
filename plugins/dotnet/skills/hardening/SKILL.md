@@ -342,7 +342,7 @@ app.UseForwardedHeaders(); // FIRST
 
 ## Resilience (outbound calls)
 
-Every outbound `HttpClient` carries a **Polly v8 resilience pipeline** — don't hand-roll retry/timeout.
+Every outbound call uses a typed `IHttpClientFactory` client (`dotnet:csharp` → Outbound HTTP: never a per-call or `static` `HttpClient`) that carries a **Polly v8 resilience pipeline** — don't hand-roll retry/timeout.
 Default to `AddStandardResilienceHandler()` (retry + total/per-try timeout + circuit-breaker + hedging);
 custom pipelines order strategies outer→inner. **Retry only idempotent calls**; jitter is mandatory; the
 SSRF handler composes **inside** the pipeline. Pipelines emit OTel automatically. Full rules + ordering +

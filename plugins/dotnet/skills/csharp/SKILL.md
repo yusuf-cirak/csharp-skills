@@ -9,7 +9,7 @@ description: Applies the C# house style and routes to the sibling skills. Use be
 
 - Route first → `dotnet:ddd`, `dotnet:web-api`, `dotnet:validation`, `dotnet:hardening`, `dotnet:observability`, `dotnet:testing`
 - Namespaces & file organization
-- Naming & layout (Microsoft framework style)
+- Async methods → `references/async-concurrency.md`
 - Immutability & records
 - Discriminated unions
 - State as types → `references/state-as-types.md`
@@ -17,6 +17,7 @@ description: Applies the C# house style and routes to the sibling skills. Use be
 - Errors → `references/monads.md`
 - Modern C#
 - Time → `dotnet:testing`
+- Outbound HTTP → `references/resilience.md`, `dotnet:hardening`
 - Constants → `dotnet:validation`
 - References — load when → `references/linq.md`, `references/performance.md`, `references/async-concurrency.md`, `references/composition.md`, `references/state-as-types.md`, `references/value-object-base.md`, `references/monads.md`, `references/ef-core-data-access.md`, `references/mediator.md`, `references/resilience.md`, `references/caching.md`, `references/input-limits.md`, `references/build-and-analyzers.md`, `references/outbox-debezium-masstransit.md`
 - Decision notes
@@ -70,17 +71,12 @@ Re-route at these checkpoints: a new file type or layer enters the change; a log
 - `GlobalUsings.cs` carries the cross-file usings.
 - Service registration lives in `DependencyInjection.cs`, split into partials (`DependencyInjection.Database.cs`, `DependencyInjection.Observability.cs`) as it grows.
 
-## Naming & layout (Microsoft framework style)
+## Async methods
 
-Match the dotnet/runtime, EF Core, and ASP.NET Core source conventions:
-
-- Private instance fields `_camelCase` (`private readonly ISqlExpressionFactory _sqlFactory;`); static fields `s_`; thread-static fields `t_`.
-- Write the visibility modifier first, even when it is the default (`private static`; `abstract`/`virtual` follow visibility).
-- Language keywords over BCL names: `int`/`string`/`float`.
-- `var` when the right-hand side states the type (`new`, cast, literal); spell the type out when the RHS is a method call with a non-obvious return type.
-- `using` order: `System.*` first, then the rest, each group sorted.
-- `sealed` by default; open a type for inheritance deliberately.
-- `internal` for building-block types, exposed to tests with `[assembly: InternalsVisibleTo("…UnitTests")]`.
+- Every method that returns `Task`, `Task<T>`, `ValueTask`, `ValueTask<T>` or `IAsyncEnumerable<T>` ends with `Async` (`GetTokenAsync`), on the interface and every implementation. Names a framework or interface dictates (`Handle`, `Invoke`, `ExecuteAsync`, event handlers) keep that name.
+- Every async method takes `CancellationToken cancellationToken = default` as its **last** parameter and passes it to every awaited call below it (`DbContext`, `HttpClient`, other async methods). A token that is accepted and then ignored is a bug. Handlers and endpoints receive the token from the framework and forward it (a framework-dictated signature without the default stays as the framework defines it).
+- `CancellationToken.None` mid-chain only when the work must outlive the caller, with a comment saying why.
+- Pool/channel/background-work details: `references/async-concurrency.md`.
 
 ## Immutability & records
 
@@ -125,6 +121,51 @@ public sealed class Subscription(TimeProvider time)
     public bool IsExpired(DateTimeOffset until) => time.GetUtcNow() >= until;
 }
 builder.Services.AddSingleton(TimeProvider.System);
+```
+
+## Outbound HTTP
+
+Every outbound call goes through `IHttpClientFactory`, using a **typed client** by default.
+
+- Never `new HttpClient()` per call (exhausts sockets) and never a `static` `HttpClient` field (pins DNS, skips the handler pipeline, so no resilience/telemetry/SSRF handlers). Never resolve `IHttpClientFactory` in business code when a typed client fits.
+- A typed client is a class that takes `HttpClient` in its constructor and owns one downstream's calls. Register it with `AddHttpClient<CatalogClient>()` and inject the **concrete type**; it needs no interface by default (tests fake the downstream with a stub `HttpMessageHandler`). Add an interface (`AddHttpClient<ICatalogClient, CatalogClient>()`) only when a real second implementation or a module boundary calls for one. Named clients only when several unrelated callers share one configured client.
+- Configure in the registration: `BaseAddress`, `Timeout`, constant default headers, then `.AddStandardResilienceHandler()` (`references/resilience.md`) and any `AddHttpMessageHandler`.
+- The `HttpClient` is shared across requests, so per-request values (user token, tenant, correlation) go on the `HttpRequestMessage`, never `DefaultRequestHeaders`.
+- Request and response bodies are typed (a `record` / `readonly record struct` per payload, sent with `JsonContent.Create`), never hand-built strings, anonymous objects or `Dictionary<string, object>`.
+- The client returns `Result<T>` (`references/monads.md`), never `T?` and never an exception for an expected failure: a non-success status and an empty body are both `Result.Failure<T>(...)`. Dispose `HttpRequestMessage` and `HttpResponseMessage` (`using`), and never swallow failures into a half-filled result.
+- The typed client is transient: don't capture it in a singleton; inject it into scoped/transient consumers or use `IHttpClientFactory` there.
+
+```csharp
+public readonly record struct CreateProductRequest(string Name, decimal Price);
+
+public sealed class CatalogClient(HttpClient http)
+{
+    public async Task<Result<Product>> CreateProductAsync(
+        CreateProductRequest body, string accessToken, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "products")
+        {
+            Content = JsonContent.Create(body),
+        };
+        request.Headers.Authorization = new("Bearer", accessToken);
+
+        using var response = await http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            return Result.Failure<Product>($"catalog returned {(int)response.StatusCode}");
+
+        var product = await response.Content.ReadFromJsonAsync<Product>(cancellationToken);
+        return product is null
+            ? Result.Failure<Product>("catalog returned an empty body")
+            : Result.Success(product);
+    }
+}
+
+builder.Services.AddHttpClient<CatalogClient>(client =>
+    {
+        client.BaseAddress = new Uri(catalogOptions.BaseUrl);
+        client.Timeout = TimeSpan.FromSeconds(30);
+    })
+    .AddStandardResilienceHandler();
 ```
 
 ## Constants
