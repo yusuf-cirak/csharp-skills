@@ -19,7 +19,7 @@ description: Applies the C# house style and routes to the sibling skills. Use be
 - Time → `dotnet:testing`
 - Outbound HTTP → `references/resilience.md`, `dotnet:hardening`
 - Constants → `dotnet:validation`
-- References — load when → `references/linq.md`, `references/performance.md`, `references/async-concurrency.md`, `references/composition.md`, `references/state-as-types.md`, `references/value-object-base.md`, `references/monads.md`, `references/ef-core-data-access.md`, `references/mediator.md`, `references/resilience.md`, `references/caching.md`, `references/input-limits.md`, `references/build-and-analyzers.md`, `references/outbox-debezium-masstransit.md`
+- References — load when → `references/linq.md`, `references/performance.md`, `references/async-concurrency.md`, `references/composition.md`, `references/state-as-types.md`, `references/value-object-base.md`, `references/monads.md`, `references/ef-core-data-access.md`, `references/mediator.md`, `references/resilience.md`, `references/root-client.md`, `references/caching.md`, `references/input-limits.md`, `references/build-and-analyzers.md`, `references/outbox-debezium-masstransit.md`
 - Decision notes
 
 ## Files
@@ -34,6 +34,7 @@ description: Applies the C# house style and routes to the sibling skills. Use be
 - `references/ef-core-data-access.md` — EF Core data access — performance & value-object persistence (single source of truth)
 - `references/mediator.md` — Mediator selection & licensing (single source of truth)
 - `references/resilience.md` — Resilience pipelines (single source of truth)
+- `references/root-client.md` — Root client + typed sub-clients
 - `references/caching.md` — Application caching — hybrid L1/L2 (shared reference)
 - `references/input-limits.md` — InputLimits constants
 - `references/build-and-analyzers.md` — Build & analyzers — gates, branch-aware style enforcement, generator packaging
@@ -188,6 +189,7 @@ builder.Services.AddHttpClient<CatalogClient>(client =>
 | `references/ef-core-data-access.md` | EF Core queries, paging, bulk work, value-object persistence |
 | `references/mediator.md` | picking a mediator library, AutoMapper → Mapperly |
 | `references/resilience.md` | outbound calls: Polly v8 pipelines, chaos testing |
+| `references/root-client.md` | one platform with several downstream APIs: `platform.Api.Method()` facade, lazy typed sub-clients |
 | `references/caching.md` | application cache (hybrid L1/L2, FusionCache) |
 | `references/input-limits.md` | the `InputLimits` constants class |
 | `references/build-and-analyzers.md` | `Directory.Build.props` / analyzer gates, `PrivateAssets` for generators, slow builds |
