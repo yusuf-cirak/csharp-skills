@@ -12,7 +12,8 @@ for skill in sorted(root.glob("*/SKILL.md")):
     m = re.match(r"---\nname: (.+)\ndescription: (.+)\n---\n", s)
     if not m: errs.append(f"{skill}: bad frontmatter"); continue
     name, desc = m.groups()
-    if not re.fullmatch(r"[a-z0-9-]{1,64}", name): errs.append(f"{skill}: bad name")
+    if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name) or len(name) > 64: errs.append(f"{skill}: bad name")
+    if name != skill.parent.name: errs.append(f"{skill}: name '{name}' != folder (opencode requires a match)")
     if len(desc) > 1024: errs.append(f"{skill}: description {len(desc)} > 1024")
     if re.search(r"\b(I|you|your)\b", desc): errs.append(f"{skill}: description not third person")
     if n > 500: errs.append(f"{skill}: {n} lines > 500")
