@@ -93,25 +93,49 @@ RuleFor(x => x.Tags).NotNull();   // missing count cap
 
 ## 3b. Validators run in the pipeline (mediator pipeline behavior)
 
-Validators MUST execute **before** the handler, automatically — not by a hand-written `Validate()` call the developer can forget. Register a mediator `IPipelineBehavior` that runs every `IValidator<TRequest>` and short-circuits on failure. Works with whichever mediator the project uses — which one to pick (MediatR is commercial from v13; default is the free source-gen `Mediator`) is decided in `../csharp/references/mediator.md`.
+Validators MUST execute **before** the handler, automatically — not by a hand-written `Validate()` call the developer can forget. Register a mediator `IPipelineBehavior` that runs every `IValidator<TRequest>` and short-circuits on failure. The behavior does **not throw**: it returns a failed `Result`/`Result<T>` carrying a `ValidationError` (field → messages) through the normal Result channel, and the single endpoint result mapper renders that as the RFC 9457 400. Which mediator to pick (MediatR is commercial from v13; default is the free source-gen `Mediator`) is decided in `../csharp/references/mediator.md`. Shape below is `Mediator` 3.x (`ValueTask`, `MessageHandlerDelegate<TRequest,TResponse>`, `next(request, ct)`, `IMessage` marker constraint):
 
 ```csharp
 public sealed class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidator<TRequest>> validators)
-    : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+    : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull, IMessage
 {
-    public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken ct)
+    public async ValueTask<TResponse> Handle(TRequest request, MessageHandlerDelegate<TRequest, TResponse> next, CancellationToken ct)
     {
-        if (!validators.Any()) return await next(ct);
+        if (!validators.Any()) return await next(request, ct);
         var ctx = new ValidationContext<TRequest>(request);
         var failures = (await Task.WhenAll(validators.Select(v => v.ValidateAsync(ctx, ct))))
             .SelectMany(r => r.Errors).Where(f => f is not null).ToArray();
-        if (failures.Length != 0) throw new ValidationException(failures);
-        return await next(ct);
+        if (failures.Length == 0) return await next(request, ct);
+
+        var errors = failures
+            .GroupBy(f => f.PropertyName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(f => f.ErrorMessage).Distinct(StringComparer.Ordinal).ToArray(), StringComparer.Ordinal);
+        return ResultFailureFactory<TResponse>.Create(new ValidationError(errors)); // failed Result, no exception
+    }
+}
+
+// Builds a failed Result / Result<T> for the closed TResponse; strategy resolved once and cached in a static field.
+internal static class ResultFailureFactory<TResponse>
+{
+    private static readonly Func<Error, TResponse> Factory = Build();
+    public static TResponse Create(Error error) => Factory(error);
+    private static Func<Error, TResponse> Build()
+    {
+        var type = typeof(TResponse);
+        if (type == typeof(Result)) return error => (TResponse)(object)Result.Failure(error);
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Result<>))
+        {
+            var failure = type.GetMethod(nameof(Result.Failure), BindingFlags.Public | BindingFlags.Static, [typeof(Error)])!;
+            return error => (TResponse)failure.Invoke(null, [error])!;
+        }
+        return _ => throw new InvalidOperationException(
+            $"ValidationBehavior requires the response to be Result or Result<T>, but the handler returns {type}.");
     }
 }
 ```
 
-Wire it with `cfg.AddOpenBehavior(typeof(ValidationBehavior<,>))` + `services.AddValidatorsFromAssemblies(assemblies, includeInternalTypes: true)`. The thrown `ValidationException` is mapped by the global handler to a **RFC 9457 `ValidationProblemDetails`** (HTTP 400, `errors` = field → messages) — see `hardening` → Error Handling. Handlers then assume a valid request.
+Wire it with `options.PipelineBehaviors = [typeof(ValidationBehavior<,>)]` in `AddMediator(...)` (MediatR: `cfg.AddOpenBehavior(...)`) + `services.AddValidatorsFromAssemblies(assemblies, includeInternalTypes: true)`. The `ValidationError` reaches the wire through the one Result → HTTP mapper (`ValidationError` → `ValidationProblem` 400 with `errors` = field → messages; any other `Error` → `Problem` with its status) — see `hardening` → Error Handling. Handlers assume a valid request and never see a `ValidationException`. A validated request whose handler does **not** return a `Result` type throws `InvalidOperationException` on first use — deliberate: validation failures must flow through the Result channel, not an exception.
 
 ## 4. Global `JsonSerializerOptions` hardening
 
@@ -182,26 +206,7 @@ public sealed class Endpoint : BaseEndpoint<Request, Result<UploadResult>>
 
 ## 7. Pagination is mandatory
 
-Every list/query endpoint paginates. No filterless `GetAll`. Inherit a shared base:
-
-```csharp
-public abstract record PagedRequest
-{
-    public int Page { get; init; } = 1;
-    public int PageSize { get; init; } = 50;
-}
-
-public sealed class PagedRequestValidator : AbstractValidator<PagedRequest>
-{
-    public PagedRequestValidator()
-    {
-        RuleFor(x => x.Page).GreaterThan(0);
-        RuleFor(x => x.PageSize).InclusiveBetween(1, InputLimits.MaxPageSize);
-    }
-}
-```
-
-Concrete request validators inherit / include the paged validator.
+Every list/query endpoint paginates. No filterless `GetAll`. There is no `PagedRequest` base or paged validator to inherit: the page is read from the ambient request by `PageRequest.FromCurrentRequest()` and **clamped**, not validated (size < 1 → 20, > 200 → 200, page < 1 → 1), so a hostile or empty query can never ask for an unbounded set. Queries carry no `PageRequest`. Shape and the EF `ToPagedResultAsync()` extension live in `web-api` → Pagination.
 
 ## 8. Rate limiting
 

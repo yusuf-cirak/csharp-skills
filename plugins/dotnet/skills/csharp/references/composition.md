@@ -25,6 +25,20 @@ services.AddOptions<JwtOptions>()
 
 Options classes are sealed, immutable where possible, and annotated (`[Required]`, `[Range]`). Read raw `IConfiguration` only at composition time.
 
+**Trap — two copies of the options.** An `AddX(this WebApplicationBuilder, Action<TOptions> configure = null)` extension often needs the values *at registration time* to branch DI (`JwtMode.Authority` vs `Symmetric`, `Local` vs `Distributed` rate limiting). Reading an eager bound copy (`builder.Configuration.GetSection(...).Get<TOptions>()`) creates a **second object** that the `AddOptions()` pipeline above never sees: the validated `IOptions<T>` the runtime consumes and the copy that drove the wiring can disagree. Whatever the code-configure callback does must be applied to **both**:
+
+```csharp
+var optionsBuilder = services.AddOptions<JwtOptions>().BindConfiguration(JwtOptions.SectionName);
+if (configure is not null) optionsBuilder.Configure(configure);   // 1. the IOptions<T> pipeline
+optionsBuilder.ValidateDataAnnotations().Validate(/* cross-field */).ValidateOnStart();
+
+var opts = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+configure?.Invoke(opts);                                           // 2. the eager copy that drives wiring below
+services.AddAuthentication().AddJwtBearer(o => { if (opts.Mode == JwtMode.Authority) o.Authority = opts.Authority; /* ... */ });
+```
+
+The eager copy is also **unvalidated** (validation runs on the pipeline at start-up); keep its use to the DI branch and read everything else from `IOptions<T>`/`IOptionsMonitor<T>`.
+
 For AOT/trimming and zero-reflection validation, source-generate the validator with **`[OptionsValidator]`** (.NET 8+) instead of `ValidateDataAnnotations()`:
 
 ```csharp

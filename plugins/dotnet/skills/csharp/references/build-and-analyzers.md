@@ -44,8 +44,9 @@ branches, tight inner loop) and skip it on the main branch, which only receives 
 | Pure Roslyn analyzer (Meziantou, Roslynator) | `PrivateAssets="all"` | nothing at runtime |
 | Generator **with a runtime library** (Vogen → `Vogen.SharedTypes`, EF Projectables) | `PrivateAssets="analyzers"` | `"all"` compiles, then throws `FileNotFoundException` at runtime |
 
-- Add `ExcludeAssets="contentFiles"` to Vogen to hide its redundant `Vogen.targets` node in the IDE (the real one ships
-  in `buildTransitive/` and is unaffected).
+- The exact Vogen reference is `<PackageReference Include="Vogen" ExcludeAssets="contentFiles" PrivateAssets="analyzers" />`
+  (same pair in `strongly-typed-ids-and-value-objects.md`). `ExcludeAssets="contentFiles"` hides its redundant
+  `Vogen.targets` node in the IDE (the real one ships in `buildTransitive/` and is unaffected).
 - **Reference a generator only in the projects that use its output.** A generator re-runs in every project that
   references it; scoping generators to their own projects cut `CoreCompile` by ~88% in a 23-project solution.
 - **Prefer the plain package over its "drop-in generator" variant** when you only need the runtime types: `ZLinq`,

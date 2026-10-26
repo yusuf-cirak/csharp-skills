@@ -30,7 +30,7 @@ description: Guides .NET domain modeling and solution layout. Use when modeling 
 - `dotnet:validation` (`../validation/SKILL.md`) — ASP.NET Core Input Security & Serialization Limits
 - `dotnet:testing` (`../testing/SKILL.md`) — C# Testing Standard
 
-Owns **where domain logic lives** and how the solution is structured: DDD tactical patterns (business logic in domain models, domain services, domain events, private-constructor + static-factory aggregates, value objects for primitives, discriminated unions for variants), the Modular Monolith layout (`BuildingBlocks/*`, `Modules/<Name>/{Application,Contracts,Domain,Infrastructure}`, `Presentation/*.Host`), and Vertical-Slice module structure. Record/value-object/discriminated-union *language patterns* come from `csharp`; this skill governs domain modeling and module layout. Apply alongside `csharp`.
+Owns **where domain logic lives** and how the solution is structured: DDD tactical patterns (business logic in domain models, domain services, domain events, private-constructor + static-factory aggregates, value objects for primitives, discriminated unions for variants), the Modular Monolith layout (`BuildingBlocks/{Application,Domain,Infrastructure,Presentation}/*`, `Modules/<Name>/{<Name>,<Name>.Contracts}` with layers as folders, `Host/*.AppHost`), and Vertical-Slice module structure. Record/value-object/discriminated-union *language patterns* come from `csharp`; this skill governs domain modeling and module layout. Apply alongside `csharp`.
 
 ## Domain Driven Design
 
@@ -49,20 +49,29 @@ Owns **where domain logic lives** and how the solution is structured: DDD tactic
 
 ## Modular Monolith Architecture
 
-Default layout:
+Default layout (the reference repo, TicketMaster):
 
-- `BuildingBlocks/`
-  - `BuildingBlocks.Application` — MediatR behaviors, base abstractions, monads.
-  - `BuildingBlocks.Domain` — Entity, AggregateRoot, DomainEvent.
-  - `BuildingBlocks.Host` — middleware, Swagger/Scalar, host defaults.
-  - `BuildingBlocks.Infrastructure` — Persistence base, Outbox, shared infra.
-- `Modules/<ModuleName>/`
-  - `<Solution>.<ModuleName>.Application` — Features, Commands, Queries, Handlers.
-  - `<Solution>.<ModuleName>.Contracts` — Public interfaces + DTOs for cross-module use.
-  - `<Solution>.<ModuleName>.Domain` — domain models, aggregates, business rules.
-  - `<Solution>.<ModuleName>.Infrastructure` — module-specific persistence and impl.
-- `Presentation/<Solution>.Host` — ASP.NET Core Web API entrypoint, bootstraps all modules.
+- `src/BuildingBlocks/` — **one project per cross-cutting capability, grouped by layer folder** (~13 blocks):
+  - `Application/BuildingBlocks.Application` — Mediator pipeline behaviors (`Validation`/`Lock`/`SensitiveRequest`), ports (`ICurrentUser`, `ITokenBlacklist`, `IDistributedLock`), pagination.
+  - `Domain/BuildingBlocks.Domain` — `Entity`, `AggregateRoot`/`IAggregateRoot`, `IDomainEvent` (+ `IPreDomainEvent`/`IPostDomainEvent`), `Error`/`ValidationError`.
+  - `Infrastructure/BuildingBlocks.{Persistence,Caching,Locking,Messaging.Kafka,Configuration.Secrets}` — EF conventions + outbox + interceptors, FusionCache/Redis, Redis lock + token blacklist, MassTransit Kafka rider, encrypted config.
+  - `Presentation/BuildingBlocks.{Web,Security,RateLimiting,Observability,HealthChecks,Modularity}` — service defaults + idempotency + Result→HTTP mapper, JWT/scopes, rate limiting, OTel, health, `IModule`.
+- `src/Modules/<ModuleName>/` — **one project plus a Contracts project**, layers are folders, not projects:
+  - `<Solution>.Modules.<ModuleName>/{Application,Domain,Infrastructure,Host,Migrations}` — commands/queries/handlers, aggregates, DbContext + repositories, endpoints + the `IModule` class, EF migrations.
+  - `<Solution>.Modules.<ModuleName>.Contracts` — integration events + public DTOs for cross-module use.
+- `src/Host/<Solution>.AppHost` — the only executable; registers modules by type and owns `AddMediator()` (the source generator runs only in the outermost project).
 - `<Solution>.slnx` — solution file.
+
+Module registration is a named opt-in, no assembly scanning for modules:
+
+```csharp
+// each module: Name, Assembly (scanned for handlers/validators), Add(services, config), MapEndpoints(group)
+public sealed class EventsModule : IModule { /* ... */ }
+
+// host
+builder.AddModules(m => m.Add<PlatformModule>().Add<IamModule>().Add<EventsModule>());
+api.MapModuleEndpoints(); // every module's MapEndpoints on the shared /api group
+```
 
 If the existing project uses a different architecture, **follow that architecture** and record the deviation so it stays consistent across the session.
 
@@ -94,28 +103,53 @@ Full idioms + query-perf rules: `../csharp/references/ef-core-data-access.md`.
 
 ## Domain-event dispatch (concrete)
 
-Aggregates raise events into an internal list; **a `SaveChangesInterceptor` dispatches them in the same
-transaction** — not a hand-called publish the developer can forget. For cross-process delivery, the
-outbox rows are written by an **event handler** (never dual-write to a broker; see `hardening` → Background Jobs),
-relayed by a `BackgroundService` (see `csharp` → Channels / hosted services).
+Aggregates implement `IAggregateRoot` (`DomainEvents` + `ClearDomainEvents()`) and raise events into an
+internal list; **a scoped `SaveChangesInterceptor` drains and dispatches them** — not a hand-called publish the
+developer can forget. Cross-process delivery always goes through the outbox row committed with the state
+(never dual-write to a broker; see `hardening` → Background Jobs), relayed by Debezium or a polling
+`BackgroundService` (`../csharp/references/outbox-debezium-masstransit.md`).
 
-**The developer's whole job is one call:** raise the event in the domain (`Raise(new OrderPaid(...))`) and
-save the aggregate. Nobody (not the repository, not the command handler) adds outbox rows by hand. A
-pre-commit handler per integration event does it, inside the same transaction as the state change:
+**Primary path — the command enqueues the integration event.** `IOutboxWriter.Enqueue` only appends an
+`OutboxMessage` to the current change tracker; the handler's own `SaveChangesAsync` commits state + row in one
+transaction. The writer is **keyed by DbContext** (one per module — an unkeyed registration collides across
+modules):
 
 ```csharp
-public sealed class OrderPaidOutbox(AppDbContext db, TimeProvider time) : INotificationHandler<OrderPaid>
+public sealed class Handler(
+    EventsDbContext db,
+    [FromKeyedServices(nameof(EventsDbContext))] IOutboxWriter outbox) : IRequestHandler<Command, Result<Response>>
 {
-    public ValueTask Handle(OrderPaid e, CancellationToken ct)
+    public async ValueTask<Result<Response>> Handle(Command request, CancellationToken ct)
     {
-        db.OutboxMessages.Add(OutboxMessage.From(e, time.GetUtcNow()));   // same DbContext, same SaveChanges
-        return ValueTask.CompletedTask;
+        var scheduled = Event.Schedule(request.Name, request.Venue, request.StartsOn, request.Capacity);
+        if (!scheduled.IsSuccess) return scheduled.Error;
+
+        var ev = scheduled.Value;
+        db.Events.Add(ev);
+        outbox.Enqueue(new EventScheduledIntegrationEvent(ev.Id.Value, ev.Name, /* ... */),
+            aggregateType: nameof(Event), aggregateId: ev.Id.Value.ToString());
+        await db.SaveChangesAsync(ct); // state + outbox row, one transaction
+        return Result.Success(new Response(ev.Id.Value));
     }
 }
 ```
 
-Adding a new cross-process event = one event record + one such handler; no call site changes. The event
-must be handled **pre-commit** (`IPreDomainEvent`) so the row commits atomically with the state.
+**Alternative — a pre-commit domain-event handler writes the row.** When the aggregate raises a domain event
+and the command should not know about integration events, one `INotificationHandler<T>` per event does the
+`Enqueue`, run by the interceptor **pre-commit** (`IPreDomainEvent`) so the row commits atomically with the
+state:
+
+```csharp
+public sealed class OrderPaidOutbox([FromKeyedServices(nameof(OrdersDbContext))] IOutboxWriter outbox)
+    : INotificationHandler<OrderPaid>
+{
+    public ValueTask Handle(OrderPaid e, CancellationToken ct)
+    {
+        outbox.Enqueue(new OrderPaidIntegrationEvent(e.OrderId), aggregateType: "Order", aggregateId: e.OrderId.ToString());
+        return ValueTask.CompletedTask; // same DbContext, same SaveChanges
+    }
+}
+```
 
 **Two-model persistence** (flat row, aggregate not tracked; `state-as-types.md` §5a): the tracker holds
 the row, not the `AggregateRoot`, so the interceptor below finds nothing. Have the repository hand the
@@ -133,18 +167,28 @@ public sealed class DomainEventCollector
 ```
 
 ```csharp
-public sealed class DomainEventInterceptor(IPublisher publisher) : SaveChangesInterceptor
+public sealed class DomainEventDispatchInterceptor(IPublisher publisher) : SaveChangesInterceptor
 {
+    private readonly List<IPostDomainEvent> _postCommit = [];
+
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData e, InterceptionResult<int> r, CancellationToken ct = default)
     {
-        var events = e.Context!.ChangeTracker.Entries<AggregateRoot>()
-            .SelectMany(x => x.Entity.DrainDomainEvents()).ToArray();
-        foreach (var ev in events) await publisher.Publish(ev, ct); // outbox handlers add their rows here
+        var aggregates = e.Context!.ChangeTracker.Entries<IAggregateRoot>()
+            .Where(x => x.Entity.DomainEvents.Count > 0).Select(x => x.Entity).ToArray();
+        var events = aggregates.SelectMany(a => a.DomainEvents).ToArray();
+        foreach (var a in aggregates) a.ClearDomainEvents();
+
+        foreach (var pre in events.OfType<IPreDomainEvent>()) await publisher.Publish(pre, ct); // same transaction
+        _postCommit.AddRange(events.OfType<IPostDomainEvent>());
         return await base.SavingChangesAsync(e, r, ct);
     }
+    // SavedChangesAsync publishes _postCommit; SaveChangesFailed(Async) clears it so a rolled-back save leaks nothing.
 }
 ```
+
+Register the interceptor **scoped** and add it to the DbContext from the same scope, so `IPublisher` resolves
+handlers against the very DbContext being saved (works identically under an HTTP scope and a consumer scope).
 
 > Bulk `ExecuteUpdate`/`ExecuteDelete` bypasses the change tracker, so it does **not** raise domain
 > events — use it only for maintenance paths, never to mutate event-raising aggregates.

@@ -12,7 +12,10 @@
 
 MediatR, AutoMapper, and MassTransit moved to **commercial/paid licensing** (MediatR v13+,
 AutoMapper v15+, MassTransit v9+, during 2024–2025; free only under a revenue threshold). The skills
-no longer assume MediatR is free. Pick the mediator **before scaffolding a handler**:
+no longer assume MediatR is free. The reference codebase (TicketMaster) runs the source-generated
+**`Mediator` 3.0.2** (`Mediator.Abstractions` + `Mediator.SourceGenerator`); it replaced a pinned
+MediatR 12.x in a refactor, so the samples in these skills use the `Mediator` shapes. Pick the mediator
+**before scaffolding a handler**:
 
 ## Decision rule
 
@@ -27,26 +30,45 @@ no longer assume MediatR is free. Pick the mediator **before scaffolding a handl
 
 ## API parity (why the swap is cheap)
 
-The handler/behavior contracts are the same shape, so the slice skeleton (`dotnet:web-api`) and
-`ValidationBehavior<,>` (`dotnet:validation`) are reused verbatim:
+The handler/behavior contracts are the same shape, so the slice skeleton (`dotnet:web-api`) is reused
+almost verbatim. The differences are mechanical: `Mediator` handlers and behaviors return `ValueTask`,
+a behavior's `next` is a `MessageHandlerDelegate<TRequest, TResponse>` called as `next(request, ct)`, and
+behaviors constrain on the `IMessage` marker:
 
 ```csharp
 public sealed record CreateActivity(...) : IRequest<Result<ActivityId>>;
-public sealed class Handler : IRequestHandler<CreateActivity, Result<ActivityId>> { /* ... */ }
-public sealed class ValidationBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> { /* ... */ }
+public sealed class Handler : IRequestHandler<CreateActivity, Result<ActivityId>>
+{
+    public ValueTask<Result<ActivityId>> Handle(CreateActivity request, CancellationToken ct) { /* ... */ }
+}
+public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull, IMessage
+{
+    public ValueTask<TResponse> Handle(TRequest request, MessageHandlerDelegate<TRequest, TResponse> next, CancellationToken ct) { /* ... */ }
+}
 ```
 
 Registration differs:
 
 ```csharp
-// martinothamar/Mediator (source-gen) — preferred
-builder.Services.AddMediator(o => o.ServiceLifetime = ServiceLifetime.Scoped);
+// martinothamar/Mediator (source-gen) — preferred. Scoped, not the library default Singleton: handlers take
+// scoped EF DbContexts, and a Singleton handler holding one is a captive-dependency bug.
+builder.Services.AddMediator(o =>
+{
+    o.ServiceLifetime = ServiceLifetime.Scoped;
+    o.PipelineBehaviors = [typeof(SensitiveRequestBehavior<,>), typeof(ValidationBehavior<,>), typeof(LockBehavior<,>)]; // declared order
+});
 
 // MediatR (≤ v12, free) — acceptable
-builder.Services.AddMediatR(c => c.RegisterServicesFromAssembly(typeof(Program).Assembly));
+builder.Services.AddMediatR(c => c.RegisterServicesFromAssembly(typeof(Program).Assembly)
+    .AddOpenBehavior(typeof(ValidationBehavior<,>)));
 ```
 
-Open-behavior registration (`AddOpenBehavior(typeof(ValidationBehavior<,>))`) exists in both.
+`Mediator.SourceGenerator` only generates `AddMediator()` in the **outermost** project (the host), so a
+library cannot register the mediator itself; with `Assemblies` left unset it discovers handlers across every
+referenced assembly. The full `ValidationBehavior<,>` (failed `Result`, no exception) is in
+`dotnet:validation` §3b; the other pipeline behaviors (`ILockRequest`/`LockBehavior`,
+`ISensitiveRequest`/`SensitiveRequestBehavior`) and their order are in `dotnet:web-api` → Pipeline behaviors.
 
 ## Object mapping — no reflection mappers
 

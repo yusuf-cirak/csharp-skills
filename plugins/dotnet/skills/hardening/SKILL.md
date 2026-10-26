@@ -13,6 +13,7 @@ description: Hardens ASP.NET Core services exposed to untrusted or multi-tenant 
 - Security Headers + CORS
 - Forwarded Headers / Real Client IP
 - Cryptography
+- Secrets in configuration
 - Error Handling → `dotnet:validation`
 - Structured Logging & Audit → `dotnet:observability`
 - EF Core Hardening
@@ -165,36 +166,27 @@ Failed-auth lockout — store fail counter in Redis with TTL 10 min; on the 5th 
 
 ## Idempotency
 
-Mutation endpoints (`POST`/`PUT`/`PATCH`/non-idempotent `DELETE`) require an `Idempotency-Key` header. Server stores `key → (request-hash, status, response)` in Redis with TTL 24 h.
+Idempotency is a **per-endpoint opt-in `IEndpointFilter`** (`.RequireIdempotency()` on the route or group), not a global middleware scanning every request — only the endpoints that can double-create or double-charge pay the cost. On an opted-in unsafe method (`POST`/`PUT`/`PATCH`/`DELETE`) a missing or over-long (> 200 chars) `Idempotency-Key` → 400; safe methods pass through.
 
-- Same key + same body hash → replay cached response.
-- Same key + different body hash → 409 (replay with mismatched payload).
-- Missing key on a mutation → 400.
+- **Cache key is scoped by caller**: `idempotency:{sub or client IP}:{method}:{path}:{key}`. The key is client-chosen, so an unscoped key would let a caller replay a victim's stored response (cross-user disclosure).
+- Only a **2xx** response **≤ 1 MB** is stored — errors must stay retryable. Stored for **24 h** in `IDistributedCache` as a binary blob `[status i32][contentTypeLen i32][contentType][body]` (no JSON/base64 wrapping on the write path).
+- A hit replays status + content-type + body and sets `Idempotency-Replayed: true`.
+- No `IDistributedCache` registered → log a warning and run the handler (degrade, do not fail the request).
+- De-dupes **sequential** retries only. Two truly concurrent requests with the same key both run.
 
 ```csharp
-public sealed class IdempotencyMiddleware(IIdempotencyStore store)
-{
-    public async Task InvokeAsync(HttpContext ctx, RequestDelegate next)
-    {
-        if (!HttpMethods.IsPost(ctx.Request.Method) && !HttpMethods.IsPut(ctx.Request.Method)
-            && !HttpMethods.IsPatch(ctx.Request.Method))
-        { await next(ctx); return; }
+public static TBuilder RequireIdempotency<TBuilder>(this TBuilder b) where TBuilder : IEndpointConventionBuilder =>
+    b.AddEndpointFilter<TBuilder, IdempotencyEndpointFilter>();
 
-        if (!ctx.Request.Headers.TryGetValue("Idempotency-Key", out var key))
-        {
-            await Results.Problem("Idempotency-Key required", statusCode: 400).ExecuteAsync(ctx);
-            return;
-        }
-
-        var bodyHash = await HashBodyAsync(ctx.Request);
-        if (await store.TryReplayAsync(key!, bodyHash, ctx.Response)) return;
-
-        await next(ctx);
-        if (ctx.Response.StatusCode is >= 200 and < 500)
-            await store.SaveAsync(key!, bodyHash, ctx.Response, TimeSpan.FromHours(24));
-    }
-}
+// inside the filter
+var scope = http.User.FindFirstValue("sub") ?? http.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+var cacheKey = $"idempotency:{scope}:{http.Request.Method}:{http.Request.Path}:{key}";
+if (await cache.GetAsync(cacheKey, http.RequestAborted) is { } cached) return new ReplayedResult(cached);
+// run next(context) with Response.Body swapped for a MemoryStream, copy to the real body, then
+// if (StatusCode is >= 200 and < 300 && buffer.Length <= 1 MB) cache.SetAsync(cacheKey, Encode(...), 24h)
 ```
+
+Upgrades not implemented here: store a **body hash** with the entry and answer a same-key/different-body replay with **409**; an **atomic reservation** (`SET NX` on the key before running the handler) so concurrent duplicates are serialized, or route such commands through `ILockRequest` (`web-api` → Pipeline behaviors).
 
 Inbound webhooks: require HMAC signature + `X-Timestamp` (reject if `|now - ts| > 5 min`) + nonce store (24 h replay window).
 
@@ -211,7 +203,7 @@ Inbound webhooks: require HMAC signature + `X-Timestamp` (reject if `|now - ts| 
 - **Tenant id MUST come from a token claim**, never from route/query/body. Expose via `ICurrentTenant` populated from `HttpContext.User`.
 - `mTLS` for service-to-service traffic inside the cluster.
 
-JWT bearer validation — hardened defaults (config-driven: an **asymmetric key pair is the default**; OIDC `Authority`+JWKS for prod; a symmetric HMAC secret only as an explicit opt-in for a single-process dev/test setup):
+JWT bearer validation — hardened defaults (config-driven: **asymmetric is the preferred production default**; OIDC `Authority`+JWKS is the prod path; a symmetric HMAC secret only for a single-process dev/test setup). Honest status of the reference repo: TicketMaster's `JwtOptions.Mode` has only `Symmetric` (its default) and `Authority`; there is no configured-asymmetric-key mode yet, and `kid`-based rotation via `CurrentKeyId` + `PreviousKeys` is **uncommitted** work-in-progress in `JwtOptions`/`JwtAuthenticationExtensions`/`JwtTokenService`.
 
 ```csharp
 o.MapInboundClaims = false; // keep "sub" as "sub" — rate-limiter, audit and log enrichment read it raw
@@ -224,13 +216,14 @@ o.TokenValidationParameters = new()
 };
 ```
 
-- **Sign asymmetrically by default — ES256 (RS256 where a consumer needs it).** The issuer holds the private key; every API validates with the public key only (JWKS, or a configured JWK/PEM). With HS256 every validating service holds the secret that can *mint* tokens, so one compromised service forges tokens for all of them. Symmetric signing is acceptable only when issuer and validator are the same process in dev/test, and it must be an explicit opt-in — never the options default. The private key comes from the secret store (Key Vault etc.), never `appsettings` or the repo; an issuing service publishes its public keys at `/.well-known/jwks.json`.
+- **Sign asymmetrically — ES256 (RS256 where a consumer needs it).** The issuer holds the private key; every API validates with the public key only (JWKS, or a configured JWK/PEM). With HS256 every validating service holds the secret that can *mint* tokens, so one compromised service forges tokens for all of them. Symmetric signing is acceptable only when issuer and validator are the same process in dev/test. Prefer making asymmetric the options default; where a codebase still defaults to symmetric (TicketMaster today), treat that as a known gap, not a pattern to copy. The private key comes from the secret store (Key Vault etc.), never `appsettings` or the repo; an issuing service publishes its public keys at `/.well-known/jwks.json`.
 - **Pin the algorithm.** Set `ValidAlgorithms = ["ES256"]` so a token cannot downgrade to `none` or to an HMAC verified with the public key as the secret (algorithm confusion).
 - **Rotate keys with `kid`.** Sign with the current key and stamp its `kid`; keep retired *public* keys validation-only (`kid` → key) for at least the access-token TTL plus clock skew, then drop them. Publish a new key in the JWKS **before** signing with it. Resolve the validation key by `kid`, not by trying every key:
   ```csharp
   o.TokenValidationParameters.ValidAlgorithms = ["ES256"];
   o.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, kid, _) => keyStore.ForKid(kid); // current + previous public keys
   ```
+- **Revocation check on every request**: `JwtBearerEvents.OnTokenValidated` reads `jti` and calls `ITokenBlacklist.IsRevokedAsync(jti)` (`RedisTokenBlacklist`: `revoked:{jti}` with TTL = remaining token lifetime); on a hit `context.Fail("token_revoked")`. The blacklist **fails open** on a Redis error (logs a warning, treats as not revoked) — deliberate: availability over strict revocation, matching the rest of the Redis-dependent path. `ISensitiveRequest` commands re-run this check at handler time (`web-api` → Pipeline behaviors).
 - **Secure by default**: register the authenticated fallback policy (above). It also applies to **unmatched routes**, so an anonymous request to an unknown path returns **401, not 404** (route existence is not leaked). Mark health/docs endpoints `AllowAnonymous`.
 - **Scope authorization**: read OAuth scopes from both conventions — a space-delimited `scope` claim **and** repeated `scp` claims. Expose a `.RequireScope("orders:write")` endpoint helper (a policy + `IAuthorizationHandler`) following the same convention as `.RequireIdempotency()`. Roles use the native `.RequireAuthorization(p => p.RequireRole(...))`.
 - **401/403 as problem+json**: wire `JwtBearerEvents.OnChallenge` (401) and `OnForbidden` (403) to write RFC 9457 `ProblemDetails` via `IProblemDetailsService` (consistent with the global handler — same `traceId`/`correlation_id` stamping), set `WWW-Authenticate` on challenge, and **never leak token-validation specifics** to the caller (`OnAuthenticationFailed` stays silent in prod; detail lives in the trace/logs).
@@ -301,12 +294,22 @@ app.UseForwardedHeaders(); // FIRST
 - Secret comparison (HMAC, tokens): `CryptographicOperations.FixedTimeEquals`. Never `==` or `SequenceEqual`.
 - Secrets from a managed store (Azure Key Vault / AWS Secrets Manager / HashiCorp Vault). Plain secrets in `appsettings.*.json` committed to source control are **forbidden**.
 
+## Secrets in configuration
+
+When a value must live in config anyway (connection strings, dev signing keys), store it **encrypted** and decrypt at the configuration layer, so no consumer ever sees ciphertext and no code path reads a plain secret file:
+
+- Values prefixed `secret:` are decrypted by a **wrapping `IConfigurationProvider`**: `AddSecretConfiguration()` is called after every other source, builds the sources added so far into an inner root, and replaces them with one provider that reads through the inner and decrypts on the way out. It subscribes to the inner reload token, so a changed appsettings file / refreshed Key Vault source / rotated secret is re-decrypted and `IOptionsMonitor` consumers get a change notification.
+- Crypto is **AES-256-GCM** (nonce 12 | tag 16 | ciphertext, base64); the AES key is derived with HKDF-SHA256 from out-of-band key material (`CONFIG_SECRET_KEY` env var) **plus** a fixed app salt, so a leaked env var alone cannot decrypt.
+- The key is resolved **lazily** (`Lazy<IEncryptionProvider>`), only when a `secret:` value is actually decrypted — dev setups with no secrets need no key.
+- **Fail fast** on a value that will not decrypt: throw `InvalidOperationException` naming the key. Never pass ciphertext (or a half-processed value) through to a consumer.
+- Tests set the key material once in a `[ModuleInitializer]` (`Environment.SetEnvironmentVariable("CONFIG_SECRET_KEY", …)`) so every fixture decrypts the same way.
+
 ## Error Handling
 
 - All errors emit `ProblemDetails` (**RFC 9457**, the current problem-details RFC superseding 7807). `application/problem+json`.
 - Implement a global `IExceptionHandler` + `AddProblemDetails`, and use **`CustomizeProblemDetails` to stamp `traceId` + `correlation_id` (+ `instance` = path) on EVERY problem response** — handler-produced and framework-produced (404, 400 model-binding, 415) alike — so all error payloads look identical and are traceable.
 - Production: response carries title, status, traceId, correlation_id. Stack trace and inner exception detail go to logs only, never to the wire.
-- Map known cases: `ValidationException` → 400 `ValidationProblemDetails` (field→errors, see `validation`); **client abort** (cancellation when the client disconnected) → **499**, not 500; `BadHttpRequestException` → its own status.
+- Map known cases: a failed `Result` carrying `ValidationError` → 400 `ValidationProblemDetails` (field→errors) via the single Result → HTTP mapper, not an exception (see `validation` §3b); any other `Error` → `Problem` with the error's status; **client abort** (cancellation when the client disconnected) → **499**, not 500; `BadHttpRequestException` → its own status.
 - `traceId = Activity.Current?.TraceId.ToString()`. Never let DB / framework messages leak.
 
 ## Structured Logging & Audit

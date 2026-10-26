@@ -10,6 +10,7 @@ description: Shapes ASP.NET Core endpoints and middleware. Use when writing or e
 - Vertical slice file → `../csharp/references/monads.md`, `../csharp/references/mediator.md`, `dotnet:ddd`, `dotnet:hardening`
 - FluentValidation → `dotnet:validation`
 - Pagination → `dotnet:validation`
+- Pipeline behaviors (Mediator) → `../csharp/references/mediator.md`, `dotnet:validation`, `dotnet:hardening`
 - Strongly-typed id binding
 - Middleware pipeline order & registration safety
 - Related skills → `dotnet:csharp`, `dotnet:ddd`, `dotnet:validation`, `dotnet:hardening`, `dotnet:testing`
@@ -24,7 +25,7 @@ description: Shapes ASP.NET Core endpoints and middleware. Use when writing or e
 - `dotnet:csharp` (`../csharp/SKILL.md`) — C# House Style
 - `dotnet:testing` (`../testing/SKILL.md`) — C# Testing Standard
 
-Owns **how requests are shaped and handled** — the endpoint/handler/slice surface, the vertical-slice file skeleton (`static class <Name>Command` holding Endpoint/Request/Validator/Handler/Response), FastEndpoints/Minimal API/mediator handler wiring, FluentValidation basics, the pagination request base, and `Program.cs` middleware pipeline ordering. *Where* a slice sits in the module tree comes from `ddd`; record/monad idioms come from `csharp`; hard input limits come from `validation`.
+Owns **how requests are shaped and handled** — the endpoint/handler/slice surface, the vertical-slice file skeleton (`static class <Name>Command` holding Endpoint/Request/Validator/Handler/Response), FastEndpoints/Minimal API/mediator handler wiring, FluentValidation basics, ambient pagination, the Mediator pipeline behaviors, and `Program.cs` middleware pipeline ordering. *Where* a slice sits in the module tree comes from `ddd`; record/monad idioms come from `csharp`; hard input limits come from `validation`.
 
 ## Vertical slice file
 
@@ -58,32 +59,66 @@ install**. Full decision rule + AutoMapper→Mapperly mapping guidance: `../csha
 
 ## Pagination
 
-Every list/query endpoint paginates — no filterless `GetAll`. Inherit the shared `PagedRequest` base; the base, its validator, and the `MaxPageSize` cap live in `validation`.
+Every list/query endpoint paginates — no filterless `GetAll`. **Queries carry no `PageRequest`** and there is no `PagedRequest` base/validator to inherit: the page is **ambient**. `PageRequest.FromCurrentRequest()` reads `page`/`pageSize` from the current request's query string through an ambient accessor (`ThreadHttpContextAccessor.Current`), and the parameterless `ToPagedResultAsync()` calls it, so a handler just orders and pages. Outside an HTTP request it yields the default page (1/20); a non-HTTP caller that needs a specific page uses the `PageRequest` overload.
 
-Request clamps + result envelope + the EF projection extension (this is the read side; `PagedRequest`'s validator still enforces limits at the boundary):
+Values are **clamped, not validated**: size < 1 → 20 (default), > 200 → 200 (`MaxPageSize`), page < 1 → 1. Items are a streamed `IAsyncEnumerable<T>` (count query + one page query, no list materialization):
 
 ```csharp
 public sealed record PageRequest(int Page = 1, int PageSize = 20) {
+    public const int DefaultPageSize = 20;
     public const int MaxPageSize = 200;
     public int NormalizedPage => Page < 1 ? 1 : Page;
-    public int NormalizedPageSize => PageSize is < 1 ? 20 : PageSize > MaxPageSize ? MaxPageSize : PageSize;
+    public int NormalizedPageSize => PageSize switch { < 1 => DefaultPageSize, > MaxPageSize => MaxPageSize, _ => PageSize };
     public int Skip => (NormalizedPage - 1) * NormalizedPageSize;
+    public static PageRequest FromCurrentRequest() {
+        var query = ThreadHttpContextAccessor.Current?.Request.Query;
+        if (query is null) return new PageRequest();
+        var page = int.TryParse(query["page"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var p) ? p : 1;
+        var pageSize = int.TryParse(query["pageSize"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) ? s : DefaultPageSize;
+        return new PageRequest(page, pageSize);
+    }
 }
-public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, long TotalCount) {
+public sealed record PagedResult<T>(IAsyncEnumerable<T> Items, int Page, int PageSize, long TotalCount) {
     public int TotalPages => PageSize <= 0 ? 0 : (int)Math.Ceiling(TotalCount / (double)PageSize);
-    public bool HasNext => Page < TotalPages;
     public bool HasPrevious => Page > 1;
+    public bool HasNext => Page < TotalPages;
+    public static PagedResult<T> Empty(int page, int pageSize) => new(AsyncEnumerable.Empty<T>(), page, pageSize, 0);
 }
-public static async Task<PagedResult<T>> ToPagedResultAsync<T>(
-        this IQueryable<T> query, PageRequest page, CancellationToken ct = default) {
+public static Task<PagedResult<T>> ToPagedResultAsync<T>(this IQueryable<T> query, CancellationToken ct = default) =>
+    query.ToPagedResultAsync(PageRequest.FromCurrentRequest(), ct);
+public static async Task<PagedResult<T>> ToPagedResultAsync<T>(this IQueryable<T> query, PageRequest page, CancellationToken ct = default) {
     var total = await query.LongCountAsync(ct);
-    var items = await query.Skip(page.Skip).Take(page.NormalizedPageSize).ToListAsync(ct); // order the query first!
+    var items = query.Skip(page.Skip).Take(page.NormalizedPageSize).AsAsyncEnumerable(); // order the query first!
     return new(items, page.NormalizedPage, page.NormalizedPageSize, total);
 }
 ```
 
 - Clamp size to `MaxPageSize` — a hostile/empty query must not be able to ask for an unbounded set.
 - ALWAYS order before paging; `Skip`/`Take` over an unordered query is non-deterministic.
+- The streamed `Items` must be enumerated while the DbContext scope is alive (serialize in the endpoint; do not stash the result).
+
+## Pipeline behaviors (Mediator)
+
+Cross-cutting request rules are **marker interfaces on the request + an open-generic `IPipelineBehavior`**, registered once in the host (`Mediator.SourceGenerator` only generates `AddMediator()` in the outermost project — see `../csharp/references/mediator.md`). Declared order is the execution order, and the lifetime is **Scoped**, not the library default Singleton (handlers take scoped `DbContext`s; a Singleton holding one is a captive dependency):
+
+```csharp
+builder.Services.AddMediator(o =>
+{
+    o.ServiceLifetime = ServiceLifetime.Scoped;
+    o.PipelineBehaviors =
+    [
+        typeof(SensitiveRequestBehavior<,>), // re-verify caller (if ISensitiveRequest)
+        typeof(ValidationBehavior<,>),       // then validate (dotnet:validation §3b)
+        typeof(LockBehavior<,>),             // then acquire the distributed lock (if ILockRequest)
+    ];
+});
+```
+
+- **`ISensitiveRequest` → `SensitiveRequestBehavior`**: for change-password / revoke-sessions / delete-account commands. Re-verifies at handler time that the caller is authenticated (`ICurrentUser.IsAuthenticated`) and that the token's `jti` is not on `ITokenBlacklist`; either failure returns a 401 `Error` through the Result channel (no exception). Defense-in-depth beyond the one-time edge check, and it also guards commands dispatched outside an HTTP request.
+- **`ILockRequest` → `LockBehavior`**: single-flight by `LockKey` (default `LockExpiration` 30 s, overridable on the request). `IDistributedLock.AcquireAsync` is a non-blocking try-acquire returning `null` when held; the loser gets a 409 `lock.conflict` `Result`, never queues. Use for genuinely exactly-once operations (concurrent duplicate commands the idempotency filter cannot serialize). The default registration is a **fail-loud** `UnconfiguredDistributedLock` (`TryAddSingleton`) that throws `InvalidOperationException` when an `ILockRequest` is dispatched without Redis — it never silently runs unlocked; `AddRedisLocking()` overrides it (Medallion `DistributedLock.Redis`, auto-renewing handle).
+- All three behaviors build their failure through the same cached `ResultFailureFactory<TResponse>`, so a marked request must return `Result`/`Result<T>`.
+- `ICurrentUser`/`ITokenBlacklist` get safe defaults (`AnonymousCurrentUser`, `NoOpTokenBlacklist`) so the behaviors always resolve; the host/Redis registrations override them.
+- Status in the reference repo: the behaviors and their tests exist, but **no module request implements `ILockRequest` or `ISensitiveRequest` yet** — the markers are ready, unused.
 
 ## Strongly-typed id binding
 
